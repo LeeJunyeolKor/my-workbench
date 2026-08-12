@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">My Workbench</title>
+  <rect width="512" height="512" rx="112" fill="#0d1117"/>
+  <path d="M112 148h288v56H112z" fill="#58a6ff"/>
+  <path d="M144 204h224v154c0 18-14 32-32 32H176c-18 0-32-14-32-32V204z" fill="#161b22" stroke="#8b949e" stroke-width="16"/>
+  <path d="M190 252l44 40-44 40M258 332h70" fill="none" stroke="#7ee787" stroke-linecap="round" stroke-linejoin="round" stroke-width="22"/>
+  <path d="M176 390v42M336 390v42" stroke="#8b949e" stroke-linecap="round" stroke-width="20"/>
+</svg>

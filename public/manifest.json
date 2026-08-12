@@ -1,0 +1,15 @@
+{
+  "short_name": "Workbench",
+  "name": "My Workbench",
+  "icons": [
+    {
+      "src": "workbench.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#0d1117",
+  "background_color": "#0d1117"
+}

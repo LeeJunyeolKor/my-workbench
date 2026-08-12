@@ -1,0 +1,127 @@
+/* Modern Trello-inspired tokens (dark chrome + gradient board) */
+
+:root {
+	--workbench-nav-bg: #ffffff;
+	--workbench-nav-border: rgba(0, 0, 0, 0.06);
+	--workbench-nav-text: #172b4d;
+	--workbench-nav-muted: #6b778c;
+	--workbench-nav-hover: rgba(0, 0, 0, 0.04);
+	--workbench-nav-active: rgba(0, 0, 0, 0.08);
+
+	/* 라이트 모드 파스텔 스카이/퍼플 그라디언트 배경 */
+	--workbench-board-gradient: linear-gradient(
+		135deg,
+		#eef2f6 0%,
+		#e0e7ff 40%,
+		#fae8ff 100%
+	);
+	--workbench-page-bg: #f8fafc;
+
+	--workbench-list-width: 312px;
+
+	--workbench-card-bg-elevated: #ffffff;
+	--workbench-card-on-gradient: rgba(255, 255, 255, 0.75);
+	--workbench-surface: #ffffff;
+	--workbench-surface-muted: #f8fbff;
+	--workbench-surface-strong: #ffffff;
+	--workbench-card-shadow:
+		0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.1);
+	--workbench-panel-shadow:
+		0 1px 2px rgba(15, 23, 42, 0.06), 0 10px 28px rgba(15, 23, 42, 0.08);
+	--workbench-card-hover-shadow:
+		0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+
+	--workbench-text-primary: #172b4d;
+	--workbench-text-secondary: #5e6c84;
+	--workbench-text-on-card: #172b4d;
+	--workbench-text-on-card-muted: #6b778c;
+	--workbench-text-link: #0c66e4;
+
+	--workbench-accent-blue: #0c66e4;
+	--workbench-accent-purple: #8f7ee6;
+	--workbench-accent-yellow: #e2b100;
+	--workbench-accent-green: #1f845a;
+	--workbench-accent-orange: #d97706;
+
+	--workbench-btn-primary: #0c66e4;
+	--workbench-btn-primary-text: #ffffff;
+
+	--workbench-border: rgba(0, 0, 0, 0.08);
+	--workbench-border-soft: rgba(15, 23, 42, 0.1);
+	--workbench-border-active: rgba(0, 0, 0, 0.18);
+	--workbench-text-muted: #6b778c;
+}
+
+.workbench-board-bg {
+	background: var(--workbench-board-gradient);
+	background-attachment: fixed;
+}
+
+.workbench-scrollbar::-webkit-scrollbar {
+	height: 8px;
+	width: 8px;
+}
+.workbench-scrollbar::-webkit-scrollbar-thumb {
+	background: rgba(0, 0, 0, 0.15);
+	border-radius: 999px;
+	border: 2px solid transparent;
+	background-clip: padding-box;
+}
+
+/* Dark Mode CSS Variable Overrides */
+.dark {
+	--workbench-nav-bg: #0b0f19;
+	--workbench-nav-border: rgba(255, 255, 255, 0.08);
+	--workbench-nav-text: #dee4ea;
+	--workbench-nav-muted: #9fadbc;
+	--workbench-nav-hover: rgba(255, 255, 255, 0.06);
+	--workbench-nav-active: rgba(255, 255, 255, 0.12);
+
+	/* 다크 모드 딥스페이스 다크 블루 배경 */
+	--workbench-board-gradient: linear-gradient(
+		135deg,
+		#0b0f19 0%,
+		#111827 50%,
+		#0b0f19 100%
+	);
+	--workbench-page-bg: #0b0f19;
+
+	--workbench-card-bg-elevated: #1e1f26;
+	--workbench-card-on-gradient: rgba(26, 32, 46, 0.85);
+	--workbench-surface: rgba(18, 19, 26, 0.86);
+	--workbench-surface-muted: rgba(24, 24, 27, 0.58);
+	--workbench-surface-strong: rgba(18, 19, 26, 0.96);
+	--workbench-card-shadow:
+		0 4px 12px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.2);
+	--workbench-panel-shadow:
+		0 1px 2px rgba(0, 0, 0, 0.2), 0 14px 34px rgba(0, 0, 0, 0.28);
+	--workbench-card-hover-shadow:
+		0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
+
+	--workbench-text-primary: #dee4ea;
+	--workbench-text-secondary: #9fadbc;
+	--workbench-text-on-card: #f4f4f5;
+	--workbench-text-on-card-muted: #a1a1aa;
+	--workbench-text-link: #3b82f6;
+
+	--workbench-accent-blue: #3b82f6;
+	--workbench-accent-purple: #a855f7;
+	--workbench-accent-yellow: #f59e0b;
+	--workbench-accent-green: #10b981;
+	--workbench-accent-orange: #f97316;
+
+	--workbench-btn-primary: #3b82f6;
+	--workbench-btn-primary-text: #ffffff;
+
+	--workbench-border: rgba(255, 255, 255, 0.08);
+	--workbench-border-soft: rgba(255, 255, 255, 0.1);
+	--workbench-border-active: rgba(255, 255, 255, 0.18);
+	--workbench-text-muted: #9fadbc;
+}
+
+.dark .workbench-scrollbar::-webkit-scrollbar-thumb {
+	background: rgba(255, 255, 255, 0.2);
+	border-radius: 999px;
+	border: 2px solid transparent;
+	background-clip: padding-box;
+}
