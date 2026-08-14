@@ -45,70 +45,70 @@ skills:
     use: "@tanstack/router-core#router-core/type-safety"
 <!-- intent-skills:end -->
 
-# My Workbench Agent Guide
+# My Workbench 에이전트 가이드
 
-Read [`README.md`](./README.md) for setup and [`DESIGN.md`](./DESIGN.md) for the product contract before changing behavior.
+동작을 변경하기 전에 설치 방법을 설명하는 [`README.md`](./README.md)와 제품 기준을 정의한 [`DESIGN.md`](./DESIGN.md)를 읽는다.
 
-## Mission
+## 목표
 
-- Build a single-developer, local-first ADE around `Task → Plan → Worktree → Agent run → Diff and checks → Decision`.
-- Treat `/` as the main work console. Prefer improving that flow over adding another dashboard.
-- Consolidate overlapping features. If a change does not shorten the core loop or clarify the next action, question whether it belongs.
+- 한 명의 개발자를 위한 로컬 우선 ADE를 `작업 → 계획 → 워크트리 → 에이전트 실행 → 변경·검증 → 판단` 흐름으로 만든다.
+- `/`를 메인 업무 콘솔로 취급한다. 대시보드를 더 만들기보다 이 흐름을 개선한다.
+- 겹치는 기능은 통합한다. 핵심 흐름을 단축하지 않거나 다음 행동을 분명하게 만들지 못하는 기능은 필요한지 다시 판단한다.
 
-## Sources of truth
+## 데이터별 기준
 
-- Tasks: `TASKS.md` under `MY_WORKBENCH_DATA`.
-- Plans: Markdown under `WORKBENCH_PLANS_DIR`.
-- Repository and change state: Git and configured worktree roots.
-- Agent Workspace execution state: the local Tauri runtime and its events. Plan Chat currently has a separate server-side process path; do not add a third runtime.
-- External metadata: optional read-only connectors; connector failure must not block local workflows.
+- 작업: `MY_WORKBENCH_DATA` 아래의 `TASKS.md`
+- 계획: 저장된 계획 경로, `WORKBENCH_PLANS_DIR`, `MY_WORKBENCH_DATA/plans` 순서로 선택한 디렉터리의 Markdown 파일
+- 저장소와 변경 상태: Git과 설정된 워크트리 루트
+- 에이전트 작업대 실행 상태: 로컬 Tauri 런타임과 이벤트. Plan Chat은 현재 별도의 서버 측 프로세스를 사용하므로 세 번째 실행 경로를 추가하지 않는다.
+- 외부 메타데이터: 선택적인 읽기 전용 커넥터. 커넥터 실패가 로컬 흐름을 막아서는 안 된다.
 
-## Code boundaries
+## 코드 경계
 
-- `src/routes`: route composition, loaders, and page interaction.
-- `src/components`: reusable presentation and interaction components.
-- `src/server`: filesystem, Git, process, keychain, and connector access.
-- `src/lib`: provider-neutral types, shared transformations, and explicit client adapters; keep domain transformations pure and focused-testable.
-- `src-tauri`: desktop agent lifecycle, process control, changed files, and diff commands.
-- Validate every server-function input at the boundary. Keep Node-only APIs out of client-importable modules.
-- Put provider integrations behind `WorkbenchConnector`. Do not leak provider URLs, credentials, statuses, or repository catalogs into shared models or routes.
-- Do not add route-to-route component imports. Move shared UI into `src/components` when touching the current `/` and `/design-preview` compatibility arrangement.
-- Do not edit `src/routeTree.gen.ts`; TanStack Router generates it.
-- Preserve the `intent-skills` block above; `pnpm dlx @tanstack/intent@latest install --map` manages it.
+- `src/routes`: 라우트 조합, 로더, 페이지 상호작용
+- `src/components`: 재사용 가능한 표현·상호작용 컴포넌트
+- `src/server`: 파일시스템, Git, 프로세스, 키체인, 커넥터 접근
+- `src/lib`: 특정 서비스 공급자에 종속되지 않는 타입, 공유 변환, 명시적인 클라이언트 어댑터. 핵심 도메인 변환은 순수 함수로 유지하고 집중 테스트를 작성한다.
+- `src-tauri`: 데스크톱 에이전트 생명주기, 프로세스 제어, 변경 파일, diff 명령
+- 모든 서버 함수 입력은 경계에서 검증한다. Node 전용 API를 클라이언트가 가져올 수 있는 모듈에 두지 않는다.
+- 공급자 연동은 `WorkbenchConnector` 뒤에 둔다. 공급자 URL, 자격 증명, 상태값, 저장소 목록을 공통 모델이나 라우트로 유출하지 않는다.
+- 라우트가 다른 라우트의 컴포넌트를 직접 가져오는 구조를 추가하지 않는다. 현재 `/`와 `/design-preview` 호환 구조를 수정할 때 공유 UI를 `src/components`로 옮긴다.
+- `src/routeTree.gen.ts`는 TanStack Router가 생성하므로 직접 수정하지 않는다.
+- 위의 `intent-skills` 블록은 `pnpm dlx @tanstack/intent@latest install --map`이 관리하므로 보존한다.
 
-## Data and mutation safety
+## 데이터 및 변경 안전
 
-- Do not scan workspace roots unless `WORKBENCH_WORKSPACE_ROOTS` or an explicit saved setting enables them.
-- Tests that touch files, keychains, or agent settings must use isolated temporary directories. Never mutate the user's real `~/.my-workbench`, `~/.agents`, `~/.codex`, or repository roots.
-- Never commit `.env`, credentials, private URLs, session transcripts, or generated runtime data. Use synthetic fixtures.
-- Keep destructive Git/filesystem actions and future remote writes behind an explicit user action and appropriate confirmation.
-- Treat every client-supplied path as untrusted. Resolve symlinks and enforce allowed-root containment before filesystem, Git, or process access; current workspace-root configuration does not yet protect every mutation path.
-- Prefer argv-based process APIs over shell command strings, and preserve traversal, shell-argument, cancellation, and output-draining protections.
-- Treat new Tauri commands as security-sensitive because IPC can reach local files and processes.
-- Do not add background transfer of task or plan content to an external AI API. The current Plan AI fallback can transmit plan content after local CLI failure; replace it with a separate explicit opt-in before treating this boundary as safe.
+- `WORKBENCH_WORKSPACE_ROOTS` 또는 명시적으로 저장한 설정이 활성화하지 않은 작업공간 루트는 탐색하지 않는다.
+- 파일, 키체인, 에이전트 설정을 다루는 테스트는 격리된 임시 디렉터리를 사용한다. 사용자의 실제 `~/.my-workbench`, `~/.agents`, `~/.codex`, 저장소 루트를 변경하지 않는다.
+- `.env`, 자격 증명, 비공개 URL, 세션 기록, 생성된 런타임 데이터를 커밋하지 않는다. 테스트에는 합성 데이터를 사용한다.
+- 파괴적인 Git·파일시스템 작업과 향후 원격 쓰기는 명시적인 사용자 행동과 영향에 맞는 확인 과정 뒤에서만 실행한다.
+- 클라이언트가 전달한 모든 경로를 신뢰하지 않는다. 심볼릭 링크를 해석한 실제 경로가 허용 루트 안에 있는지 파일시스템, Git, 프로세스 접근 전에 검증한다. 현재 작업공간 루트 설정은 아직 모든 변경 경로를 보호하지 않는다.
+- 셸 명령 문자열보다 argv 기반 프로세스 API를 사용한다. 경로 순회와 셸 인자를 차단하고, 취소 동작을 보존하며, 프로세스 출력 스트림이 막히지 않도록 끝까지 소비한다.
+- Tauri IPC는 로컬 파일과 프로세스에 접근할 수 있으므로 새 Tauri 명령을 보안 변경으로 취급한다.
+- 작업이나 계획 내용을 외부 AI API로 백그라운드 전송하는 기능을 추가하지 않는다. 현재 Plan AI 자동 전환은 로컬 CLI 실패 후 계획 내용을 전송할 수 있으므로 자동 전환에 별도의 명시적 동의 절차를 추가하기 전까지 안전한 경계로 간주하지 않는다.
 
-## UI rules
+## UI 규칙
 
-- Keep user-facing copy in Korean and code identifiers in English.
-- Handle loading, empty, partial, error, and destructive-confirmation states. One failed source must not blank the main console.
-- Reuse `--workbench-*` design tokens; add a token instead of repeating hard-coded colors.
-- Preserve keyboard access, visible focus, light/dark themes, and usable narrow-screen layouts.
-- Browser-mode agent output is a preview. Use the Tauri runtime when claiming real Agent Workspace process, cancellation, or diff behavior.
-- Verify the actual server and port before browser debugging; stale instances on 3000/3001/3002 can mislead.
+- 사용자에게 보이는 문구는 한글로 작성한다. 코드 식별자와 그대로 표시해야 하는 고유 기술명은 영어를 유지한다.
+- 로딩, 비어 있음, 일부 실패, 오류, 파괴적 작업 확인 상태를 처리한다. 한 데이터 소스의 실패로 메인 콘솔 전체를 비우지 않는다.
+- `--workbench-*` 디자인 토큰을 재사용한다. 같은 색상을 반복해서 직접 쓰지 말고 토큰을 추가한다.
+- 키보드 접근, 보이는 포커스, 라이트·다크 테마, 좁은 화면 사용성을 유지한다.
+- 브라우저 모드의 에이전트 출력은 프리뷰다. 실제 에이전트 작업대 프로세스, 취소, diff 동작을 주장하려면 Tauri 런타임에서 확인한다.
+- 브라우저 문제를 조사하기 전에 실제 실행 중인 서버와 포트를 확인한다. 3000, 3001, 3002 포트의 오래된 프로세스가 원인을 잘못 보이게 할 수 있다.
 
-## Working agreement
+## 작업 규칙
 
-- Use `pnpm`. `pnpm dev` serves TanStack Start on port 3000.
-- Inspect the current worktree before editing and preserve unrelated user changes.
-- Make the smallest coherent change. Reuse existing helpers and delete obsolete paths instead of adding parallel abstractions.
-- Add or update one focused Vitest test for non-trivial parser, filter, state, or server-boundary behavior.
-- Update `DESIGN.md` when the product boundary or core flow changes. Update `README.md` when setup, configuration, or public usage changes.
+- 패키지 관리자는 `pnpm`을 사용한다. `pnpm dev`는 3000 포트에서 TanStack Start를 실행한다.
+- 편집 전에 현재 워크트리 상태를 확인하고 관련 없는 사용자 변경을 보존한다.
+- 동작을 만족하는 가장 작은 일관된 변경을 만든다. 병렬 추상화를 추가하기보다 기존 도우미를 재사용하고 오래된 경로를 삭제한다.
+- 단순하지 않은 파서, 필터, 상태 변환, 서버 경계 변경에는 범위를 좁힌 Vitest 테스트를 하나 이상 추가하거나 갱신한다.
+- 제품 경계나 핵심 흐름이 바뀌면 `DESIGN.md`, 설치·설정·공개 사용법이 바뀌면 `README.md`를 갱신한다.
 
-## Verification
+## 검증
 
-- Documentation-only: `git diff --check` and link/path review.
-- TypeScript behavior: focused Vitest, then `pnpm test`, `pnpm exec tsc --noEmit`, `pnpm check`, and `pnpm build` as appropriate.
-- Rust or Tauri behavior: `cargo test --manifest-path src-tauri/Cargo.toml` plus the relevant frontend checks.
-- UI behavior: verify affected routes in a real browser, including console errors and the narrow-screen layout when relevant.
+- 문서만 변경: `git diff --check`, 링크와 경로 확인
+- TypeScript 동작 변경: 집중 Vitest 후 필요 범위에 따라 `pnpm test`, `pnpm exec tsc --noEmit`, `pnpm check`, `pnpm build`
+- Rust 또는 Tauri 동작 변경: `cargo test --manifest-path src-tauri/Cargo.toml`과 관련 프런트엔드 검사
+- UI 변경: 실제 브라우저에서 영향받은 경로, 콘솔 오류, 필요한 경우 좁은 화면 확인
 
-A change is done only when the requested behavior works, relevant checks pass, generated or private data is absent from the diff, and the documentation still describes the resulting system.
+요청한 동작이 실제로 작동하고, 관련 검사가 통과하며, diff에 생성물이나 비공개 데이터가 없고, 문서가 변경 후 시스템을 정확히 설명할 때 작업이 완료된다.

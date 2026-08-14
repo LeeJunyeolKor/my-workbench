@@ -1,138 +1,139 @@
-# My Workbench Design
+# My Workbench 설계
 
-My Workbench is a local-first agentic development environment for one developer. It should make the current unit of work, the agent's activity, the resulting changes, and the next human decision visible in one place.
+My Workbench는 한 명의 개발자를 위한 로컬 우선 에이전틱 개발 환경(ADE)이다. 현재 작업, 에이전트의 활동, 발생한 변경, 다음에 필요한 사람의 판단을 한곳에서 보여주는 것을 목표로 한다.
 
-This document is the product and interaction contract. Implementation rules live in [`AGENTS.md`](./AGENTS.md); setup instructions live in [`README.md`](./README.md).
+이 문서는 제품과 상호작용의 기준이다. 구현 규칙은 [`AGENTS.md`](./AGENTS.md), 설치 방법은 [`README.md`](./README.md)에서 다룬다.
 
-## Product thesis
+## 제품 방향
 
-My Workbench is tailored to a personal development loop, not designed as a general project-management suite or an Orca clone. A feature belongs when it shortens this loop:
+My Workbench는 범용 프로젝트 관리 도구나 Orca 복제품이 아니라 개인의 개발 흐름에 맞춘 도구다. 다음 흐름을 단축하는 기능만 제품에 포함한다.
 
-`Task → Plan → Worktree → Agent run → Diff and checks → Decision`
+`작업 → 계획 → 워크트리 → 에이전트 실행 → 변경·검증 → 판단`
 
-The UI should answer four questions without making the user reconstruct state across tools:
+사용자가 여러 도구의 상태를 직접 조합하지 않아도 다음 질문에 답할 수 있어야 한다.
 
-1. What am I working on?
-2. What is the agent doing now?
-3. What changed, and did verification pass?
-4. What should I decide or do next?
+1. 지금 무엇을 작업하고 있는가?
+2. 에이전트는 지금 무엇을 하고 있는가?
+3. 무엇이 바뀌었고 검증은 통과했는가?
+4. 다음에 무엇을 판단하거나 실행해야 하는가?
 
-## Design principles
+## 설계 원칙
 
-### Local state is the source of truth
+### 로컬 상태를 기준으로 삼는다
 
-Tasks and plans are Markdown files, workspace state comes from Git, and agent execution runs locally. The product must remain useful when every connector is unavailable.
+작업과 계획은 Markdown 파일, 작업공간 상태는 Git, 에이전트 실행은 로컬 런타임을 기준으로 삼는다. 모든 커넥터를 사용할 수 없는 상황에서도 핵심 기능은 동작해야 한다.
 
-### Actions matter more than reports
+### 보고보다 행동을 우선한다
 
-The main console prioritizes active work, blocked work, failed checks, and the next available action. Historical reporting is secondary.
+메인 콘솔은 진행 중인 작업, 막힌 작업, 실패한 검사, 다음에 실행할 수 있는 행동을 우선해서 보여준다. 과거 활동 보고는 부가 기능이다.
 
-### One concept gets one surface
+### 하나의 개념에는 하나의 화면만 둔다
 
-Extend the existing task, plan, worktree, or agent surface before adding another dashboard or chat flow for the same state. Repeated views should share a view model rather than copy business logic.
+같은 상태를 보여주는 대시보드나 채팅 흐름을 새로 만들기 전에 기존 작업, 계획, 워크트리, 에이전트 화면을 확장한다. 여러 화면에서 반복되는 정보는 비즈니스 로직을 복사하지 않고 같은 뷰 모델을 사용한다.
 
-### Partial failure stays partial
+### 일부 실패를 전체 실패로 만들지 않는다
 
-Tasks, plans, worktrees, and connectors load independently. One failed source shows a source-level error while the rest of the console remains usable.
+작업, 계획, 워크트리, 커넥터는 서로 독립적으로 읽는다. 한 데이터 소스가 실패하면 해당 소스의 오류만 표시하고 나머지 콘솔은 계속 사용할 수 있어야 한다.
 
-### Writes are explicit and reviewable
+### 쓰기 작업은 명시하고 검토할 수 있어야 한다
 
-Local file changes, process execution, Git mutations, and future connector writes must be initiated by a clear user action. Destructive or external writes require a preview or confirmation appropriate to their impact.
+로컬 파일 변경, 프로세스 실행, Git 변경, 향후 커넥터를 통한 쓰기는 명확한 사용자 행동으로 시작해야 한다. 파괴적 작업이나 외부 쓰기는 영향에 맞는 미리보기 또는 확인 과정을 제공한다.
 
-## Information architecture
+## 정보 구조
 
-| Route | Responsibility |
+| 경로 | 책임 |
 | --- | --- |
-| `/` | Main work console: active work, source health, progress, and next actions |
-| `/tasks` | Local task board backed by `TASKS.md` |
-| `/plans` | Markdown implementation-plan index and detail |
-| `/worktrees` | Configured repositories, worktrees, branches, and Git state |
-| `/agent-slice` | One agent run: workspace, lifecycle, output, changed files, and diff |
-| `/agent-settings` | Discover and control local agent rules, skills, and hooks |
+| `/` | 메인 업무 콘솔: 진행 중인 작업, 데이터 소스 상태, 진행률, 다음 행동 |
+| `/tasks` | `TASKS.md`를 사용하는 로컬 작업 보드 |
+| `/plans` | Markdown 구현 계획 목록과 상세 |
+| `/worktrees` | 설정된 저장소, 워크트리, 브랜치, Git 상태 |
+| `/agent-slice` | 단일 에이전트 실행의 작업공간, 생명주기, 출력, 변경 파일, diff |
+| `/agent-settings` | 로컬 에이전트 룰, 스킬, 훅 탐색과 제어 |
 
-`/design-preview` is a temporary compatibility route for the component currently used by `/`. It is not a second product surface; do not add navigation or route-specific behavior to it. Remove it after the console component has a neutral home.
+`/design-preview`는 현재 `/`에서 사용하는 컴포넌트를 위한 임시 호환 경로다. 별도 제품 화면이 아니므로 내비게이션이나 경로 전용 동작을 추가하지 않는다. 콘솔 컴포넌트를 중립적인 위치로 옮긴 뒤 제거한다.
 
-## Linking model and current limitation
+## 연결 모델과 현재 한계
 
-The current implementation does not yet persist one stable work-item identity across the loop. Task IDs are regenerated when `TASKS.md` is parsed, plans use directory names as IDs, and plan, branch, worktree, and session associations rely on task-like keys and path hints.
+현재 구현은 전체 흐름에서 사용할 하나의 안정적인 작업 항목 ID를 저장하지 않는다. `TASKS.md`를 읽을 때 작업 ID가 다시 생성되고, 계획은 디렉터리 이름을 ID로 사용하며, 계획·브랜치·워크트리·세션 연결은 작업 키 형태의 문자열과 경로 힌트에 의존한다.
 
-Treat those links as compatibility heuristics, not durable references. The intended model is a provider-neutral, persisted work-item ID shared by tasks, plans, worktrees, and agent runs. Provider issue or review IDs remain optional attributes and must not become shared domain keys.
+이 연결은 영속적인 참조가 아니라 호환용 휴리스틱으로 취급한다. 목표 모델은 특정 서비스 공급자에 종속되지 않고 작업, 계획, 워크트리, 에이전트 실행이 공유하는 영속 작업 항목 ID다. 외부 이슈나 리뷰 ID는 선택 속성으로만 저장하며 공통 도메인 키로 사용하지 않는다.
 
-## Main console contract
+## 메인 콘솔 계약
 
-The console combines four independently readable sources:
+콘솔은 다음 네 데이터 소스를 서로 독립적으로 읽어 결합한다.
 
-- tasks: current queue and completion state;
-- plans: implementation progress and recent plan activity;
-- worktrees: active branches and working-tree state;
-- connectors: optional external issues, reviews, or deployments.
+- 작업: 현재 대기열과 완료 상태
+- 계획: 구현 진행률과 최근 계획 활동
+- 워크트리: 활성 브랜치와 작업 트리 상태
+- 커넥터: 선택적으로 연결한 외부 이슈, 리뷰, 배포 정보
 
-Each visible item should lead to a concrete detail or action. The console must distinguish loading, empty, unavailable, blocked, and completed states. Empty local data is an onboarding state, not an error. Connector failure must not block local work.
+표시되는 각 항목은 구체적인 상세 화면이나 행동으로 이어져야 한다. 콘솔은 로딩, 비어 있음, 사용 불가, 막힘, 완료 상태를 구분한다. 로컬 데이터가 비어 있는 것은 오류가 아니라 초기 설정 상태다. 커넥터 실패가 로컬 작업을 막아서는 안 된다.
 
-## System boundaries
+## 시스템 경계
 
 ```text
-Local Markdown ─┐
-Git worktrees ──┼─> server functions ─> pure domain/view models ─> route UI
-Connectors ─────┘
+로컬 Markdown ─┐
+Git 워크트리 ──┼─> 서버 함수 ─> 순수 도메인·뷰 모델 ─> 라우트 UI
+커넥터 ────────┘
 
-Route UI ─> Tauri commands ─> local agent process and diff events
+라우트 UI ─> Tauri 명령 ─> 로컬 에이전트 프로세스와 diff 이벤트
 ```
 
-- `src/routes` owns route composition and page interaction.
-- `src/components` owns reusable UI.
-- `src/server` owns filesystem, Git, process, keychain, and connector access.
-- `src/lib` owns provider-neutral types, shared transformations, and explicit browser or Tauri client adapters. Keep domain transformations pure and tested.
-- `src-tauri` owns the Agent Workspace desktop runtime and emits serializable lifecycle events. Its lifecycle is the execution source of truth for that surface.
+- `src/routes`: 라우트 조합과 페이지 상호작용
+- `src/components`: 재사용 가능한 UI
+- `src/server`: 파일시스템, Git, 프로세스, 키체인, 커넥터 접근
+- `src/lib`: 특정 서비스 공급자에 종속되지 않는 타입, 공유 변환, 명시적인 브라우저·Tauri 클라이언트 어댑터. 핵심 도메인 변환은 순수 함수와 테스트로 유지한다.
+- `src-tauri`: 에이전트 작업대의 데스크톱 런타임과 직렬화 가능한 생명주기 이벤트. 해당 화면의 실행 상태는 이 생명주기를 기준으로 삼는다.
 
-Browser-mode agent execution and diff data are previews, not proof of a real agent run. Validate real execution through the Tauri runtime.
+브라우저 모드의 에이전트 실행과 diff 데이터는 프리뷰이며 실제 에이전트 실행의 증거가 아니다. 실제 실행은 Tauri 런타임에서 검증한다.
 
-Plan Chat currently has a separate server-side CLI process and history path. Do not add another execution path; converge it with the Agent Workspace runtime or remove the duplicate flow.
+Plan Chat은 현재 별도의 서버 측 CLI 프로세스와 기록 경로를 사용한다. 실행 경로를 더 추가하지 말고 에이전트 작업대 런타임과 통합하거나 중복 흐름을 제거한다.
 
-`WorkbenchConnector` is intentionally read-only. Provider implementations may translate remote data into `issue`, `review`, or `deployment` items, but shared UI and domain code must not depend on provider URLs, credentials, statuses, or repository catalogs.
+`WorkbenchConnector`는 의도적으로 읽기 전용이다. 공급자별 구현은 원격 데이터를 `issue`, `review`, `deployment` 항목으로 변환할 수 있지만, 공통 UI와 도메인 코드는 공급자 URL, 자격 증명, 상태값, 저장소 목록에 의존해서는 안 된다.
 
-## Data and safety
+## 데이터와 안전
 
-- Runtime data stays outside the repository under `MY_WORKBENCH_DATA` and `WORKBENCH_PLANS_DIR`.
-- Repository discovery is disabled until `WORKBENCH_WORKSPACE_ROOTS` is configured.
-- Credentials stay in environment variables or the operating-system keychain and are never rendered, logged, or stored in fixtures.
-- Paths received from the client must be resolved and constrained to an allowed root before filesystem, Git, or process use.
-- Tests that touch files or agent settings use isolated temporary directories, never the user's real workbench or agent configuration.
-- Sending plan content to an external AI API is a data-boundary crossing and requires a separate explicit opt-in.
-- Agent Settings mutates real local rule, skill, and hook files. Treat enable, disable, and rename operations as writes, not display preferences.
+- 작업과 설정 데이터는 저장소 밖의 `MY_WORKBENCH_DATA`에 저장한다. 계획 경로는 저장된 `plan_settings.json` 설정, `WORKBENCH_PLANS_DIR`, `MY_WORKBENCH_DATA/plans` 순서로 결정한다.
+- 환경변수 또는 저장된 워크트리 설정에서 스캔 루트를 지정하기 전에는 저장소 탐색을 수행하지 않는다.
+- Tauri 에이전트 작업대가 만드는 워크트리는 선택한 저장소 안의 `.my-workbench-worktrees`에 저장한다.
+- 자격 증명은 환경변수 또는 운영체제 키체인에만 저장하고 화면, 로그, 테스트 데이터에 남기지 않는다.
+- 클라이언트가 전달한 경로는 파일시스템, Git, 프로세스에서 사용하기 전에 실제 경로로 해석하고 허용 루트 안에 있는지 확인해야 한다.
+- 파일이나 에이전트 설정을 다루는 테스트는 격리된 임시 디렉터리를 사용하며 사용자의 실제 워크벤치와 에이전트 설정을 건드리지 않는다.
+- 계획 내용을 외부 AI API로 보내는 것은 데이터 경계를 넘는 작업이므로 별도의 명시적 동의가 필요하다.
+- 에이전트 설정 화면은 실제 로컬 룰, 스킬, 훅 파일을 변경한다. 활성화, 비활성화, 이름 변경을 단순한 화면 설정이 아니라 쓰기 작업으로 취급한다.
 
-## Known safety gaps
+## 현재 확인된 안전성 공백
 
-- Plan AI editing currently falls back to configured external model APIs after a local CLI failure and can send plan content without a separate transfer confirmation. Until this is fixed, configuring an external API key means accepting that fallback behavior.
-- Configured workspace roots limit discovery, but not every worktree, process, or Tauri IPC path is yet constrained to those roots. Do not treat workspace configuration as a filesystem sandbox. Enforce resolved-path and symlink-aware containment before expanding mutations.
-- Agent execution is split between the Tauri Agent Workspace and the server-side Plan Chat process. The target design is one lifecycle and cancellation model.
+- Plan AI 편집은 로컬 CLI가 실패하면 설정된 외부 모델 API로 자동 전환하며, 별도 전송 확인 없이 계획 내용을 보낼 수 있다. 이 문제가 해결되기 전까지 외부 API 키 설정은 해당 자동 전환 동작에 동의하는 것으로 본다.
+- 설정된 작업공간 루트는 탐색 범위만 제한하며 모든 워크트리, 프로세스, Tauri IPC 경로를 제한하지는 않는다. 작업공간 설정을 파일시스템 샌드박스로 간주하면 안 된다. 쓰기 기능을 확대하기 전에 심볼릭 링크를 해석한 실제 경로가 허용 루트 안에 있는지 검증해야 한다.
+- 에이전트 실행은 Tauri 에이전트 작업대와 서버 측 Plan Chat 프로세스로 나뉘어 있다. 하나의 생명주기와 취소 모델로 통합하는 것이 목표다.
 
-## Interaction and visual language
+## 상호작용과 시각 언어
 
-- Keep the console dense enough for operational work, but use hierarchy and whitespace so the next action remains obvious.
-- Use the existing `--workbench-*` tokens as the visual source of truth. Add a token instead of repeating a hard-coded color.
-- Support light and dark themes, keyboard navigation, visible focus, and narrow screens.
-- Use Korean for user-facing copy. Keep code identifiers and provider-neutral technical terms in English.
-- Never communicate status by color alone; pair it with text or an icon label.
+- 업무에 필요한 정보 밀도는 유지하되 다음 행동이 분명하게 보이도록 계층과 여백을 사용한다.
+- 기존 `--workbench-*` 토큰을 시각 기준으로 사용한다. 같은 색상을 반복해서 직접 쓰지 말고 토큰을 추가한다.
+- 라이트·다크 테마, 키보드 탐색, 보이는 포커스, 좁은 화면을 지원한다.
+- 사용자에게 보이는 문구는 한글로 작성한다. 코드 식별자와 그대로 표시해야 하는 고유 기술명은 영어를 유지한다.
+- 상태를 색상만으로 전달하지 않고 텍스트나 아이콘 레이블을 함께 제공한다.
 
-## Non-goals
+## 범위 밖
 
-- multi-user project management, team permissions, or cloud synchronization;
-- bundled Jira, Bitbucket, GitHub, or deployment-provider workflows;
-- automatic merge, deploy, issue transition, or other unreviewed remote writes;
-- a second database while local files and Git remain sufficient;
-- duplicate dashboards for individual tools or providers.
+- 여러 사용자를 위한 프로젝트 관리, 팀 권한, 클라우드 동기화
+- Jira, Bitbucket, GitHub 또는 특정 배포 공급자에 종속된 기능의 코어 내장
+- 자동 머지, 배포, 이슈 상태 변경 등 검토되지 않은 원격 쓰기
+- 로컬 파일과 Git으로 충분한 동안의 별도 데이터베이스
+- 개별 도구나 공급자별 중복 대시보드
 
-## Design acceptance
+## 설계 수용 기준
 
-A product change is ready when:
+제품 변경은 다음 조건을 만족해야 한다.
 
-- it clearly maps to a stage in the core loop;
-- it makes the next action or decision easier to find;
-- local workflows still work with connectors disabled or failing;
-- links do not assume the current heuristic task IDs are stable;
-- external data transfer is separately disclosed and enabled;
-- filesystem and process paths are contained after resolving symlinks;
-- empty, loading, partial, error, and destructive-action states are handled;
-- provider-specific data stays behind a connector boundary;
-- the relevant behavior is covered by focused tests and real UI verification.
+- 핵심 흐름의 어느 단계에 해당하는지 분명하다.
+- 다음 행동이나 판단을 더 쉽게 찾을 수 있다.
+- 커넥터가 꺼져 있거나 실패해도 로컬 흐름이 동작한다.
+- 현재 휴리스틱 작업 ID가 안정적이라고 가정하지 않는다.
+- 외부 데이터 전송을 별도로 알리고 사용자가 활성화한다.
+- 심볼릭 링크를 해석한 뒤 파일시스템과 프로세스 경로가 허용 루트 안에 있는지 확인한다.
+- 비어 있음, 로딩, 일부 실패, 오류, 파괴적 작업 상태를 처리한다.
+- 공급자별 데이터가 커넥터 경계 밖으로 새지 않는다.
+- 관련 동작을 집중 테스트와 실제 UI 검증으로 확인한다.
