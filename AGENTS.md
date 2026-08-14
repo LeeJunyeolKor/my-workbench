@@ -45,13 +45,70 @@ skills:
     use: "@tanstack/router-core#router-core/type-safety"
 <!-- intent-skills:end -->
 
-## My Workbench Project Notes
+# My Workbench Agent Guide
 
-- Preserve the `intent-skills` block; it is managed by `pnpm dlx @tanstack/intent@latest install --map`.
-- Use `pnpm`; `pnpm dev` serves Vite/TanStack Start on port 3000.
-- Verify the actual running server and port before debugging browser symptoms; stale instances on 3000/3001/3002 can mislead.
-- Runtime data lives outside this repo: `~/.my-workbench/TASKS.md` and the directory configured by `WORKBENCH_PLANS_DIR`.
-- Keep route UI in `src/routes`, server functions and API clients in `src/server`, and pure tested helpers in `src/lib`.
-- For non-trivial parser, filter, or helper changes, add or update one focused Vitest test.
-- Practical verification is `pnpm test`, `pnpm build`, and `pnpm check`.
-- Do not commit `.env` or local credential files.
+Read [`README.md`](./README.md) for setup and [`DESIGN.md`](./DESIGN.md) for the product contract before changing behavior.
+
+## Mission
+
+- Build a single-developer, local-first ADE around `Task → Plan → Worktree → Agent run → Diff and checks → Decision`.
+- Treat `/` as the main work console. Prefer improving that flow over adding another dashboard.
+- Consolidate overlapping features. If a change does not shorten the core loop or clarify the next action, question whether it belongs.
+
+## Sources of truth
+
+- Tasks: `TASKS.md` under `MY_WORKBENCH_DATA`.
+- Plans: Markdown under `WORKBENCH_PLANS_DIR`.
+- Repository and change state: Git and configured worktree roots.
+- Agent Workspace execution state: the local Tauri runtime and its events. Plan Chat currently has a separate server-side process path; do not add a third runtime.
+- External metadata: optional read-only connectors; connector failure must not block local workflows.
+
+## Code boundaries
+
+- `src/routes`: route composition, loaders, and page interaction.
+- `src/components`: reusable presentation and interaction components.
+- `src/server`: filesystem, Git, process, keychain, and connector access.
+- `src/lib`: provider-neutral types, shared transformations, and explicit client adapters; keep domain transformations pure and focused-testable.
+- `src-tauri`: desktop agent lifecycle, process control, changed files, and diff commands.
+- Validate every server-function input at the boundary. Keep Node-only APIs out of client-importable modules.
+- Put provider integrations behind `WorkbenchConnector`. Do not leak provider URLs, credentials, statuses, or repository catalogs into shared models or routes.
+- Do not add route-to-route component imports. Move shared UI into `src/components` when touching the current `/` and `/design-preview` compatibility arrangement.
+- Do not edit `src/routeTree.gen.ts`; TanStack Router generates it.
+- Preserve the `intent-skills` block above; `pnpm dlx @tanstack/intent@latest install --map` manages it.
+
+## Data and mutation safety
+
+- Do not scan workspace roots unless `WORKBENCH_WORKSPACE_ROOTS` or an explicit saved setting enables them.
+- Tests that touch files, keychains, or agent settings must use isolated temporary directories. Never mutate the user's real `~/.my-workbench`, `~/.agents`, `~/.codex`, or repository roots.
+- Never commit `.env`, credentials, private URLs, session transcripts, or generated runtime data. Use synthetic fixtures.
+- Keep destructive Git/filesystem actions and future remote writes behind an explicit user action and appropriate confirmation.
+- Treat every client-supplied path as untrusted. Resolve symlinks and enforce allowed-root containment before filesystem, Git, or process access; current workspace-root configuration does not yet protect every mutation path.
+- Prefer argv-based process APIs over shell command strings, and preserve traversal, shell-argument, cancellation, and output-draining protections.
+- Treat new Tauri commands as security-sensitive because IPC can reach local files and processes.
+- Do not add background transfer of task or plan content to an external AI API. The current Plan AI fallback can transmit plan content after local CLI failure; replace it with a separate explicit opt-in before treating this boundary as safe.
+
+## UI rules
+
+- Keep user-facing copy in Korean and code identifiers in English.
+- Handle loading, empty, partial, error, and destructive-confirmation states. One failed source must not blank the main console.
+- Reuse `--workbench-*` design tokens; add a token instead of repeating hard-coded colors.
+- Preserve keyboard access, visible focus, light/dark themes, and usable narrow-screen layouts.
+- Browser-mode agent output is a preview. Use the Tauri runtime when claiming real Agent Workspace process, cancellation, or diff behavior.
+- Verify the actual server and port before browser debugging; stale instances on 3000/3001/3002 can mislead.
+
+## Working agreement
+
+- Use `pnpm`. `pnpm dev` serves TanStack Start on port 3000.
+- Inspect the current worktree before editing and preserve unrelated user changes.
+- Make the smallest coherent change. Reuse existing helpers and delete obsolete paths instead of adding parallel abstractions.
+- Add or update one focused Vitest test for non-trivial parser, filter, state, or server-boundary behavior.
+- Update `DESIGN.md` when the product boundary or core flow changes. Update `README.md` when setup, configuration, or public usage changes.
+
+## Verification
+
+- Documentation-only: `git diff --check` and link/path review.
+- TypeScript behavior: focused Vitest, then `pnpm test`, `pnpm exec tsc --noEmit`, `pnpm check`, and `pnpm build` as appropriate.
+- Rust or Tauri behavior: `cargo test --manifest-path src-tauri/Cargo.toml` plus the relevant frontend checks.
+- UI behavior: verify affected routes in a real browser, including console errors and the narrow-screen layout when relevant.
+
+A change is done only when the requested behavior works, relevant checks pass, generated or private data is absent from the diff, and the documentation still describes the resulting system.

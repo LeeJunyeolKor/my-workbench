@@ -22,6 +22,11 @@ For the desktop app:
 pnpm tauri:dev
 ```
 
+## Project documents
+
+- [`DESIGN.md`](./DESIGN.md) defines the product direction, core workflow, and design boundaries.
+- [`AGENTS.md`](./AGENTS.md) is the canonical implementation and safety guide for coding agents.
+
 ## Local data
 
 | Setting | Purpose | Default |
@@ -34,6 +39,8 @@ Worktree discovery is disabled until `WORKBENCH_WORKSPACE_ROOTS` is set. On macO
 
 Keep `.env`, access tokens, private repository URLs, and generated work data out of version control.
 
+Plan AI editing can fall back to a configured external model API after a local CLI failure and may send plan content to that provider. Do not configure external API keys unless you accept this current behavior; a separate transfer opt-in is still required by the target design.
+
 ## Verification
 
 ```bash
@@ -44,4 +51,4 @@ pnpm check
 
 ## License and publication
 
-No open-source license is currently granted. Add a license and publish this repository only after confirming ownership of every included file and any required employer export approval.
+This repository is public, but no open-source license is currently granted. Add a license before allowing reuse, modification, or redistribution.
