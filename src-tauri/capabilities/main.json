@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "Main window permissions for agent task orchestration.",
+  "description": "Main window permissions for local data and agent task orchestration.",
   "windows": ["main"],
   "permissions": [
     "core:event:allow-listen",
@@ -10,6 +10,11 @@
     "allow-start-agent-task",
     "allow-cancel-agent-task",
     "allow-get-changed-files",
-    "allow-get-diff"
+    "allow-get-diff",
+    "allow-load-tasks",
+    "allow-save-tasks",
+    "allow-list-plans",
+    "allow-load-plan",
+    "allow-save-plan-file"
   ]
 }

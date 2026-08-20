@@ -55,7 +55,7 @@ describe("projectTaskState", () => {
 		expect(state.changedFiles).toEqual([
 			{ path: "src/index.ts", status: "modified" },
 		]);
-		expect(state.logs.at(-1)?.text).toContain("completed");
+		expect(state.logs.at(-1)?.text).toContain("완료");
 	});
 
 	it("projects failure details and cancellation as terminal states", () => {

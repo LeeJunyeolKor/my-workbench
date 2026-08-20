@@ -94,19 +94,19 @@ function taskStatusTone(status: TaskState | null): PillTone {
 function taskStatusLabel(status: TaskState | null): string {
 	switch (status) {
 		case "Created":
-			return "Created";
+			return "생성됨";
 		case "Preparing":
-			return "Preparing";
+			return "준비 중";
 		case "Running":
-			return "Running";
+			return "실행 중";
 		case "Completed":
-			return "Completed";
+			return "완료";
 		case "Failed":
-			return "Failed";
+			return "실패";
 		case "Cancelled":
-			return "Cancelled";
+			return "취소됨";
 		default:
-			return "Idle";
+			return "대기 중";
 	}
 }
 
@@ -138,12 +138,10 @@ export function AgentWorkspacePanel({
 }: AgentWorkspacePanelProps) {
 	const [workspacePath, setWorkspacePath] = useState(initialWorkspacePath);
 	const [workspaceName, setWorkspaceName] = useState(
-		initialWorkspaceName ??
-			initialWorkspacePath.split("/").pop() ??
-			"workspace",
+		initialWorkspaceName ?? initialWorkspacePath.split("/").pop() ?? "작업공간",
 	);
 	const [prompt, setPrompt] = useState(
-		"Add a helper utility to format timestamps and update README",
+		"타임스탬프 형식 도우미를 추가하고 README를 갱신해 주세요.",
 	);
 	const [agentType, setAgentType] = useState<AgentType>("codex");
 	const [viewState, setViewState] = useState<TaskViewState>(() =>
@@ -325,7 +323,7 @@ export function AgentWorkspacePanel({
 		setWorkspaceName(
 			initialWorkspaceName ??
 				initialWorkspacePath.split("/").pop() ??
-				"workspace",
+				"작업공간",
 		);
 		setViewState(createTaskViewState());
 		setSelectedFile(null);
@@ -441,7 +439,7 @@ export function AgentWorkspacePanel({
 	async function handleSelectWorkspace() {
 		const path = workspacePath.trim();
 		if (!path) {
-			setPanelError("먼저 Git workspace 경로를 입력해 주세요.");
+			setPanelError("먼저 Git 작업공간 경로를 입력해 주세요.");
 			return;
 		}
 
@@ -468,7 +466,7 @@ export function AgentWorkspacePanel({
 			refreshKeyRef.current = null;
 			setViewState(createTaskViewState());
 		} catch (error) {
-			setPanelError(getErrorMessage(error, "workspace를 선택하지 못했습니다."));
+			setPanelError(getErrorMessage(error, "작업공간을 선택하지 못했습니다."));
 		}
 	}
 
@@ -485,7 +483,7 @@ export function AgentWorkspacePanel({
 		const path = workspacePath.trim();
 		const instruction = prompt.trim();
 		if (!path || !instruction) {
-			setPanelError("workspace 경로와 작업 지시를 모두 입력해 주세요.");
+			setPanelError("작업공간 경로와 작업 지시를 모두 입력해 주세요.");
 			return;
 		}
 
@@ -603,7 +601,7 @@ export function AgentWorkspacePanel({
 			setPanelError(
 				getErrorMessage(error, "에이전트 작업을 시작하지 못했습니다."),
 			);
-			setViewState((state) => appendSystemLog(state, "Task start failed"));
+			setViewState((state) => appendSystemLog(state, "작업 시작 실패"));
 		} finally {
 			if (pendingStartsRef.current.get(startRequest) === startPromise) {
 				pendingStartsRef.current.delete(startRequest);
@@ -618,7 +616,7 @@ export function AgentWorkspacePanel({
 		if (!taskId) return;
 		try {
 			await requestCancellation();
-			setViewState((state) => appendSystemLog(state, "Cancellation requested"));
+			setViewState((state) => appendSystemLog(state, "취소 요청됨"));
 		} catch (error) {
 			setPanelError(getErrorMessage(error, "작업 취소를 요청하지 못했습니다."));
 		}
@@ -630,11 +628,11 @@ export function AgentWorkspacePanel({
 				<div>
 					<h2 className="flex items-center gap-2 text-lg font-bold text-[#24292f] dark:text-[#f0f6fc]">
 						<Code2 className="h-5 w-5 text-indigo-500" />
-						Agent Workspace
+						에이전트 작업공간
 					</h2>
 					<p className="mt-1 text-xs text-[#57606a] dark:text-[#8b949e]">
-						Task → Command → Event Stream → State Projection
-						{compact ? " · selected worktree" : ""}
+						작업 → 명령 → 이벤트 스트림 → 상태 반영
+						{compact ? " · 선택한 워크트리" : ""}
 					</p>
 				</div>
 				<div className="flex items-center gap-2">
@@ -655,7 +653,7 @@ export function AgentWorkspacePanel({
 			</div>
 
 			{panelError ? (
-				<InlineNotice tone="error" title="Agent workspace 오류">
+				<InlineNotice tone="error" title="에이전트 작업공간 오류">
 					{panelError}
 				</InlineNotice>
 			) : null}
@@ -672,13 +670,13 @@ export function AgentWorkspacePanel({
 					<div className={surfaceClassName("space-y-3 p-4")}>
 						<h3 className="flex items-center gap-2 text-sm font-semibold">
 							<Folder className="h-4 w-4 text-blue-500" />
-							Workspace
+							작업공간
 						</h3>
 						<label
 							className="block text-[11px] font-medium text-zinc-500"
 							htmlFor="agent-workspace-path"
 						>
-							Local repository path
+							로컬 저장소 경로
 						</label>
 						<div className="flex gap-2">
 							<input
@@ -696,27 +694,27 @@ export function AgentWorkspacePanel({
 								disabled={!tauriRuntime}
 								className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
 							>
-								Set
+								선택
 							</button>
 						</div>
 						<p
 							className="truncate font-mono text-[11px] text-zinc-500"
 							title={workspacePath}
 						>
-							{workspaceName || "workspace not selected"}
+							{workspaceName || "작업공간 미선택"}
 						</p>
 					</div>
 
 					<div className={surfaceClassName("space-y-3 p-4")}>
 						<h3 className="flex items-center gap-2 text-sm font-semibold">
 							<Play className="h-4 w-4 text-emerald-500" />
-							Run agent task
+							에이전트 작업 실행
 						</h3>
 						<label
 							className="block text-[11px] font-medium text-zinc-500"
 							htmlFor="agent-runner-type"
 						>
-							Agent runner
+							에이전트 실행기
 						</label>
 						<select
 							id="agent-runner-type"
@@ -734,7 +732,7 @@ export function AgentWorkspacePanel({
 							className="block text-[11px] font-medium text-zinc-500"
 							htmlFor="agent-task-prompt"
 						>
-							Task prompt
+							작업 지시
 						</label>
 						<textarea
 							id="agent-task-prompt"
@@ -756,7 +754,7 @@ export function AgentWorkspacePanel({
 								) : (
 									<Play className="h-4 w-4" />
 								)}
-								Start task
+								작업 시작
 							</button>
 							{isExecuting ? (
 								<button
@@ -765,7 +763,7 @@ export function AgentWorkspacePanel({
 									className="flex items-center gap-1 rounded-md bg-rose-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-rose-700"
 								>
 									<Square className="h-3.5 w-3.5" />
-									Cancel
+									취소
 								</button>
 							) : null}
 						</div>
@@ -784,9 +782,9 @@ export function AgentWorkspacePanel({
 								</Pill>
 							</div>
 							<div>
-								<span className="text-zinc-500">Worktree</span>
+								<span className="text-zinc-500">워크트리</span>
 								<p className="mt-0.5 break-all text-zinc-700 dark:text-zinc-300">
-									{viewState.worktreePath ?? "preparing..."}
+									{viewState.worktreePath ?? "준비 중…"}
 								</p>
 							</div>
 							{viewState.branchName ? (
@@ -809,16 +807,16 @@ export function AgentWorkspacePanel({
 						<div className="flex items-center justify-between">
 							<h3 className="flex items-center gap-2 text-sm font-semibold">
 								<Terminal className="h-4 w-4 text-purple-500" />
-								Live terminal output
+								실시간 터미널 출력
 							</h3>
 							<span className="font-mono text-[11px] text-zinc-500">
-								{viewState.logs.length} logs
+								로그 {viewState.logs.length}개
 							</span>
 						</div>
 						<div className="h-56 overflow-y-auto rounded-md bg-[#0d1117] p-3 font-mono text-[11px] text-[#c9d1d9] shadow-inner">
 							{viewState.logs.length === 0 ? (
 								<div className="flex h-full items-center justify-center text-[#484f58]">
-									Waiting for task execution...
+									작업 실행 대기 중…
 								</div>
 							) : (
 								viewState.logs.map((log) => (
@@ -848,7 +846,7 @@ export function AgentWorkspacePanel({
 						<div className="flex items-center justify-between gap-2">
 							<h3 className="flex items-center gap-2 text-sm font-semibold">
 								<FileCode2 className="h-4 w-4 text-amber-500" />
-								Changed files & diff
+								변경 파일과 diff
 							</h3>
 							{viewState.worktreePath ? (
 								<button
@@ -858,13 +856,13 @@ export function AgentWorkspacePanel({
 									}
 									className="flex items-center gap-1 rounded-md bg-black/5 px-2 py-1 text-[11px] transition hover:bg-black/10 dark:bg-white/5 dark:hover:bg-white/10"
 								>
-									<RefreshCw className="h-3 w-3" /> Refresh
+									<RefreshCw className="h-3 w-3" /> 새로고침
 								</button>
 							) : null}
 						</div>
 						{viewState.changedFiles.length === 0 ? (
 							<p className="py-5 text-center text-xs text-zinc-500">
-								No changed files detected yet.
+								아직 변경된 파일이 없습니다.
 							</p>
 						) : (
 							<div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(150px,0.8fr)_minmax(0,1.4fr)]">
@@ -894,12 +892,12 @@ export function AgentWorkspacePanel({
 								</div>
 								<div className="min-h-40 min-w-0 overflow-x-auto rounded-md bg-[#0d1117] p-3 font-mono text-[11px] text-[#c9d1d9]">
 									{loadingDiff ? (
-										<div className="text-[#484f58]">Loading diff...</div>
+										<div className="text-[#484f58]">diff 불러오는 중…</div>
 									) : diffText ? (
 										<pre className="whitespace-pre-wrap">{diffText}</pre>
 									) : (
 										<div className="text-[#484f58]">
-											Select a file to inspect its diff.
+											파일을 선택하면 diff를 확인할 수 있습니다.
 										</div>
 									)}
 								</div>

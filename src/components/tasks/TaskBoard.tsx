@@ -8,14 +8,14 @@ import {
 	useSensor,
 	useSensors,
 } from "@dnd-kit/core";
-import { useServerFn } from "@tanstack/react-start";
-import { ListPlus } from "lucide-react";
+import { AlertCircle, ListPlus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getErrorMessage } from "#/lib/errors";
+import { saveTaskBoard } from "#/lib/local-data-ipc";
 import { DEFAULT_SECTIONS } from "#/lib/tasks/columns";
 import { addTask, deleteTask, moveTask, updateTask } from "#/lib/tasks/parser";
+import { createTaskBoardSaveQueue } from "#/lib/tasks/save-queue";
 import type { Task, TaskBoardData } from "#/lib/tasks/types";
-import { getTasks, saveTasks } from "#/server/tasks";
 import { BoardColumn } from "./BoardColumn";
 import { BoardHeader } from "./BoardHeader";
 import { CreateTaskModal } from "./CreateTaskModal";
@@ -27,9 +27,15 @@ type ViewMode = "board" | "list";
 
 type TaskBoardProps = {
 	initialBoard: TaskBoardData;
+	initialContent: string | null;
+	readOnlyReason?: string | null;
 };
 
-export function TaskBoard({ initialBoard }: TaskBoardProps) {
+export function TaskBoard({
+	initialBoard,
+	initialContent,
+	readOnlyReason,
+}: TaskBoardProps) {
 	const [board, setBoard] = useState(initialBoard);
 	const [viewMode, setViewMode] = useState<ViewMode>("board");
 	const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -38,49 +44,42 @@ export function TaskBoard({ initialBoard }: TaskBoardProps) {
 	const [statusMessage, setStatusMessage] = useState<string | null>(null);
 	const [createModalOpen, setCreateModalOpen] = useState(false);
 	const [dndReady, setDndReady] = useState(false);
-	const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-	const saveTasksFn = useServerFn(saveTasks);
+	const pendingSaveCount = useRef(0);
+	const enqueueSave = useRef(
+		createTaskBoardSaveQueue(saveTaskBoard, initialContent),
+	);
+	const isReadOnly = Boolean(readOnlyReason);
 	const sensors = useSensors(
 		useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
 	);
 
 	useEffect(() => setDndReady(true), []);
-	useEffect(
-		() => () => {
-			if (saveTimer.current) clearTimeout(saveTimer.current);
-		},
-		[],
-	);
 
 	const allTasks = useMemo(
 		() => board.sections.flatMap((section) => board.tasks[section.id] ?? []),
 		[board],
 	);
 
-	const scheduleSave = useCallback(
-		(nextBoard: TaskBoardData) => {
-			if (saveTimer.current) clearTimeout(saveTimer.current);
-			saveTimer.current = setTimeout(async () => {
-				setSaving(true);
-				try {
-					await saveTasksFn({ data: { board: nextBoard } });
-					setStatusMessage("저장됨");
-				} catch (error) {
-					setStatusMessage(getErrorMessage(error, "저장 실패"));
-				} finally {
-					setSaving(false);
-				}
-			}, 500);
-		},
-		[saveTasksFn],
-	);
+	const scheduleSave = useCallback((nextBoard: TaskBoardData) => {
+		pendingSaveCount.current += 1;
+		setSaving(true);
+		void enqueueSave
+			.current(nextBoard)
+			.then(() => setStatusMessage("저장됨"))
+			.catch((error) => setStatusMessage(getErrorMessage(error, "저장 실패")))
+			.finally(() => {
+				pendingSaveCount.current -= 1;
+				if (pendingSaveCount.current === 0) setSaving(false);
+			});
+	}, []);
 
 	const commitBoard = useCallback(
 		(nextBoard: TaskBoardData) => {
+			if (isReadOnly) return;
 			setBoard(nextBoard);
 			scheduleSave(nextBoard);
 		},
-		[scheduleSave],
+		[isReadOnly, scheduleSave],
 	);
 
 	const handleDragEnd = (event: DragEndEvent) => {
@@ -102,13 +101,24 @@ export function TaskBoard({ initialBoard }: TaskBoardProps) {
 				onCreateTask={() => setCreateModalOpen(true)}
 				statusMessage={statusMessage}
 				saving={saving}
+				readOnly={isReadOnly}
 			/>
 
+			{readOnlyReason ? (
+				<output className="mx-4 mb-3 flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
+					<AlertCircle className="h-4 w-4 shrink-0" />
+					{readOnlyReason}
+				</output>
+			) : null}
+
 			{allTasks.length === 0 ? (
-				<TaskEmptyState onCreate={() => setCreateModalOpen(true)} />
+				<TaskEmptyState
+					onCreate={() => setCreateModalOpen(true)}
+					readOnly={isReadOnly}
+				/>
 			) : viewMode === "list" ? (
 				<TaskListView board={board} onSelectTask={setSelectedTask} />
-			) : dndReady ? (
+			) : dndReady && !isReadOnly ? (
 				<DndContext
 					sensors={sensors}
 					collisionDetection={closestCorners}
@@ -151,12 +161,14 @@ export function TaskBoard({ initialBoard }: TaskBoardProps) {
 					commitBoard(deleteTask(board, taskId));
 					setSelectedTask(null);
 				}}
+				readOnlyReason={readOnlyReason}
 			/>
 			<CreateTaskModal
 				isOpen={createModalOpen}
 				sections={board.sections}
 				onClose={() => setCreateModalOpen(false)}
 				onCreate={(task) => commitBoard(addTask(board, task))}
+				readOnlyReason={readOnlyReason}
 			/>
 		</div>
 	);
@@ -216,7 +228,13 @@ function StaticBoardColumns({
 	);
 }
 
-function TaskEmptyState({ onCreate }: { onCreate: () => void }) {
+function TaskEmptyState({
+	onCreate,
+	readOnly,
+}: {
+	onCreate: () => void;
+	readOnly: boolean;
+}) {
 	return (
 		<div className="flex flex-1 items-center justify-center px-4 pb-8">
 			<div className="w-full max-w-xl rounded-lg border border-black/10 bg-white/80 p-6 text-center shadow-xl backdrop-blur-xl dark:border-white/10 dark:bg-zinc-900/70">
@@ -232,7 +250,8 @@ function TaskEmptyState({ onCreate }: { onCreate: () => void }) {
 				<button
 					type="button"
 					onClick={onCreate}
-					className="mt-5 rounded-md px-3 py-2 text-sm font-bold"
+					disabled={readOnly}
+					className="mt-5 rounded-md px-3 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
 					style={{
 						background: "var(--workbench-btn-primary)",
 						color: "var(--workbench-btn-primary-text)",
@@ -243,8 +262,4 @@ function TaskEmptyState({ onCreate }: { onCreate: () => void }) {
 			</div>
 		</div>
 	);
-}
-
-export async function loadTaskBoard() {
-	return getTasks();
 }

@@ -234,7 +234,7 @@ export function projectTaskState(
 					worktreePath: event.payload.worktree_path,
 				},
 				"system",
-				`Task started in ${event.payload.worktree_path}`,
+				`작업 시작: ${event.payload.worktree_path}`,
 			);
 		}
 		case "Output":
@@ -263,7 +263,7 @@ export function projectTaskState(
 			return appendLog(
 				withTaskStatus(baseState, { state: "Completed" }),
 				"system",
-				"Task completed successfully",
+				"작업을 완료했습니다.",
 			);
 		case "TaskFailed":
 			return appendLog(
@@ -272,13 +272,13 @@ export function projectTaskState(
 					details: event.payload.error,
 				}),
 				"stderr",
-				`Task failed: ${event.payload.error}`,
+				`작업 실패: ${event.payload.error}`,
 			);
 		case "TaskCancelled":
 			return appendLog(
 				withTaskStatus(baseState, { state: "Cancelled" }),
 				"system",
-				"Task cancelled by user",
+				"사용자가 작업을 취소했습니다.",
 			);
 	}
 }

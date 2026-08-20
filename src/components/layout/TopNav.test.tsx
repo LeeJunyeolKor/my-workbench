@@ -1,9 +1,7 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type React from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TopNav } from "./TopNav";
-
-const navigate = vi.fn();
 
 vi.mock("@tanstack/react-router", () => ({
 	Link: ({
@@ -24,78 +22,43 @@ vi.mock("@tanstack/react-router", () => ({
 			{children}
 		</a>
 	),
-	useNavigate: () => navigate,
 }));
-
-vi.mock("#/server/search", () => ({
-	globalSearch: vi.fn(),
-}));
-
-const searchPlaceholder = "작업, 계획, 워크트리 검색";
 
 function mockMatchMedia(matches = false) {
 	Object.defineProperty(window, "matchMedia", {
 		configurable: true,
-		value: vi.fn().mockReturnValue({
-			addEventListener: vi.fn(),
-			dispatchEvent: vi.fn(),
-			matches,
-			media: "(prefers-color-scheme: dark)",
-			onchange: null,
-			removeEventListener: vi.fn(),
-		}),
+		value: vi.fn().mockReturnValue({ matches }),
 	});
 }
 
 describe("TopNav", () => {
 	beforeEach(() => {
-		navigate.mockReset();
-		delete window.myWorkbenchCommandPalette;
 		window.localStorage?.clear();
 		mockMatchMedia(false);
 	});
 
-	it("opens the command palette from the search trigger", () => {
+	it("shows only the core product routes", () => {
 		render(<TopNav />);
 
-		expect(screen.queryByPlaceholderText(searchPlaceholder)).toBeNull();
-		fireEvent.click(
-			screen.getByText("검색...").closest("button") as HTMLElement,
+		expect(screen.getByRole("link", { name: "업무 콘솔" })).toHaveProperty(
+			"href",
+			expect.stringContaining("/"),
 		);
-
-		expect(screen.getByPlaceholderText(searchPlaceholder)).toBeTruthy();
+		expect(screen.getByRole("link", { name: "작업 보드" })).toBeTruthy();
+		expect(screen.getByRole("link", { name: "구현 계획" })).toBeTruthy();
+		expect(screen.getByRole("link", { name: "에이전트 작업대" })).toBeTruthy();
+		expect(screen.queryByRole("link", { name: "워크트리" })).toBeNull();
+		expect(screen.queryByRole("link", { name: "에이전트 설정" })).toBeNull();
+		expect(screen.queryByText("검색...")).toBeNull();
 	});
 
-	it("uses the operations console as the main navigation entry", () => {
+	it("changes the theme from the header", () => {
 		render(<TopNav />);
+
+		fireEvent.click(screen.getByRole("button", { name: "다크 모드로 전환" }));
 
 		expect(
-			screen.getByRole("link", { name: "업무 콘솔" }).getAttribute("href"),
-		).toBe("/");
-		expect(screen.queryByRole("link", { name: "디자인 프리뷰" })).toBeNull();
-	});
-
-	it("does not expose the removed Plan AI settings", () => {
-		render(<TopNav />);
-
-		expect(screen.queryByRole("button", { name: "설정 열기" })).toBeNull();
-	});
-
-	it("opens the command palette from the shared custom event", () => {
-		render(<TopNav />);
-
-		fireEvent(window, new Event("toggle-command-palette"));
-
-		expect(screen.getByPlaceholderText(searchPlaceholder)).toBeTruthy();
-	});
-
-	it("exposes a small command palette API for route-local triggers", () => {
-		render(<TopNav />);
-
-		act(() => {
-			window.myWorkbenchCommandPalette?.open();
-		});
-
-		expect(screen.getByPlaceholderText(searchPlaceholder)).toBeTruthy();
+			screen.getByRole("button", { name: "라이트 모드로 전환" }),
+		).toBeTruthy();
 	});
 });

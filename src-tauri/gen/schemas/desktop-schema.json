@@ -195,6 +195,36 @@
           "markdownDescription": "Enables the get_diff command without any pre-configured scope."
         },
         {
+          "description": "Enables the list_plans command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-list-plans",
+          "markdownDescription": "Enables the list_plans command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the load_plan command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-load-plan",
+          "markdownDescription": "Enables the load_plan command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the load_tasks command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-load-tasks",
+          "markdownDescription": "Enables the load_tasks command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the save_plan_file command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-save-plan-file",
+          "markdownDescription": "Enables the save_plan_file command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the save_tasks command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-save-tasks",
+          "markdownDescription": "Enables the save_tasks command without any pre-configured scope."
+        },
+        {
           "description": "Enables the select_workspace command without any pre-configured scope.",
           "type": "string",
           "const": "allow-select-workspace",
@@ -223,6 +253,36 @@
           "type": "string",
           "const": "deny-get-diff",
           "markdownDescription": "Denies the get_diff command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the list_plans command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-list-plans",
+          "markdownDescription": "Denies the list_plans command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the load_plan command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-load-plan",
+          "markdownDescription": "Denies the load_plan command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the load_tasks command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-load-tasks",
+          "markdownDescription": "Denies the load_tasks command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the save_plan_file command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-save-plan-file",
+          "markdownDescription": "Denies the save_plan_file command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the save_tasks command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-save-tasks",
+          "markdownDescription": "Denies the save_tasks command without any pre-configured scope."
         },
         {
           "description": "Denies the select_workspace command without any pre-configured scope.",

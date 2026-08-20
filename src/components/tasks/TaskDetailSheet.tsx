@@ -1,6 +1,10 @@
 import { CheckCircle2, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { parseIssueTitle } from "#/lib/tasks/parse-issue-title";
+import {
+	hasUnsupportedTaskTitle,
+	UNSUPPORTED_TASK_TITLE_MESSAGE,
+} from "#/lib/tasks/parser";
 import type { Task, TaskSection } from "#/lib/tasks/types";
 
 type TaskDetailSheetProps = {
@@ -9,6 +13,7 @@ type TaskDetailSheetProps = {
 	onClose: () => void;
 	onUpdate: (task: Task) => void;
 	onDelete: (taskId: string) => void;
+	readOnlyReason?: string | null;
 };
 
 export function TaskDetailSheet({
@@ -17,6 +22,7 @@ export function TaskDetailSheet({
 	onClose,
 	onUpdate,
 	onDelete,
+	readOnlyReason,
 }: TaskDetailSheetProps) {
 	const closeButtonRef = useRef<HTMLButtonElement>(null);
 	const [draft, setDraft] = useState<Task | null>(task);
@@ -43,6 +49,7 @@ export function TaskDetailSheet({
 
 	if (!task || !draft) return null;
 	const parsed = parseIssueTitle(draft.title);
+	const hasUnsupportedTitle = hasUnsupportedTaskTitle(draft.title);
 
 	return (
 		<>
@@ -95,24 +102,37 @@ export function TaskDetailSheet({
 				</header>
 
 				<div className="workbench-scrollbar flex-1 space-y-5 overflow-y-auto px-5 py-5">
+					{readOnlyReason ? (
+						<p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
+							{readOnlyReason}
+						</p>
+					) : null}
 					<label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-300">
 						제목
 						<input
 							value={draft.title}
+							disabled={Boolean(readOnlyReason)}
 							onChange={(event) =>
 								setDraft({ ...draft, title: event.target.value })
 							}
 							className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 font-normal text-zinc-900 outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
 						/>
+						{hasUnsupportedTitle ? (
+							<span className="mt-1 block text-xs text-red-600" role="alert">
+								{UNSUPPORTED_TASK_TITLE_MESSAGE}
+							</span>
+						) : null}
 					</label>
 					<label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-300">
 						메모
-						<textarea
+						<input
+							type="text"
 							value={draft.note}
+							disabled={Boolean(readOnlyReason)}
 							onChange={(event) =>
 								setDraft({ ...draft, note: event.target.value })
 							}
-							className="mt-1 min-h-28 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 font-normal text-zinc-900 outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
+							className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 font-normal text-zinc-900 outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
 						/>
 					</label>
 					<div className="grid gap-4 sm:grid-cols-2">
@@ -120,6 +140,7 @@ export function TaskDetailSheet({
 							상태
 							<select
 								value={draft.section}
+								disabled={Boolean(readOnlyReason)}
 								onChange={(event) =>
 									setDraft({ ...draft, section: event.target.value })
 								}
@@ -136,6 +157,7 @@ export function TaskDetailSheet({
 							<input
 								type="checkbox"
 								checked={draft.checked}
+								disabled={Boolean(readOnlyReason)}
 								onChange={(event) =>
 									setDraft({ ...draft, checked: event.target.checked })
 								}
@@ -151,6 +173,7 @@ export function TaskDetailSheet({
 							</h3>
 							<button
 								type="button"
+								disabled={Boolean(readOnlyReason)}
 								onClick={() =>
 									setDraft({
 										...draft,
@@ -179,6 +202,7 @@ export function TaskDetailSheet({
 									>
 										<input
 											type="checkbox"
+											disabled={Boolean(readOnlyReason)}
 											checked={subtask.checked}
 											onChange={() =>
 												setDraft({
@@ -193,6 +217,7 @@ export function TaskDetailSheet({
 										/>
 										<input
 											value={subtask.text}
+											disabled={Boolean(readOnlyReason)}
 											onChange={(event) =>
 												setDraft({
 													...draft,
@@ -210,6 +235,7 @@ export function TaskDetailSheet({
 										) : null}
 										<button
 											type="button"
+											disabled={Boolean(readOnlyReason)}
 											aria-label="하위 작업 삭제"
 											onClick={() =>
 												setDraft({
@@ -233,6 +259,7 @@ export function TaskDetailSheet({
 				<footer className="flex flex-wrap items-center justify-between gap-3 border-t border-black/10 px-5 py-3 dark:border-white/10">
 					<button
 						type="button"
+						disabled={Boolean(readOnlyReason)}
 						onClick={() => {
 							if (window.confirm("이 작업을 삭제할까요?")) onDelete(draft.id);
 						}}
@@ -251,7 +278,11 @@ export function TaskDetailSheet({
 						</button>
 						<button
 							type="button"
-							disabled={!draft.title.trim()}
+							disabled={
+								Boolean(readOnlyReason) ||
+								!draft.title.trim() ||
+								hasUnsupportedTitle
+							}
 							onClick={() =>
 								onUpdate({
 									...draft,
