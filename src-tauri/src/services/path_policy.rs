@@ -7,6 +7,7 @@ const WORKSPACE_ROOTS_ENV: &str = "WORKBENCH_WORKSPACE_ROOTS";
 #[derive(Debug)]
 pub struct AllowedWorkspaceRoots {
     roots: Vec<PathBuf>,
+    was_configured: bool,
 }
 
 impl AllowedWorkspaceRoots {
@@ -18,6 +19,9 @@ impl AllowedWorkspaceRoots {
     }
 
     fn from_env_value(value: Option<OsString>, home: Option<&Path>) -> Self {
+        let was_configured = value
+            .as_deref()
+            .is_some_and(|configured| !configured.is_empty());
         let roots = value
             .as_deref()
             .map(std::env::split_paths)
@@ -38,11 +42,19 @@ impl AllowedWorkspaceRoots {
                 roots
             });
 
-        Self { roots }
+        Self {
+            roots,
+            was_configured,
+        }
     }
 
     pub fn resolve_allowed_directory(&self, input: &str) -> Result<PathBuf, String> {
         if self.roots.is_empty() {
+            if self.was_configured {
+                return Err(format!(
+                    "{WORKSPACE_ROOTS_ENV}에 사용할 수 있는 기존 절대 디렉터리가 없습니다. 경로를 확인한 뒤 앱을 다시 실행해 주세요."
+                ));
+            }
             return Err(format!(
                 "{WORKSPACE_ROOTS_ENV}가 My Workbench 데스크톱 앱 프로세스 환경에 설정되지 않았습니다. 앱을 종료한 뒤 환경변수를 설정하고 다시 실행해 주세요."
             ));
@@ -119,12 +131,27 @@ mod tests {
 
     #[test]
     fn rejects_when_no_workspace_roots_are_configured() {
-        let policy = AllowedWorkspaceRoots { roots: Vec::new() };
+        let policy = AllowedWorkspaceRoots {
+            roots: Vec::new(),
+            was_configured: false,
+        };
 
         let error = policy.resolve_allowed_directory("/tmp").unwrap_err();
 
         assert!(error.contains(WORKSPACE_ROOTS_ENV));
         assert!(error.contains("프로세스 환경"));
+    }
+
+    #[test]
+    fn reports_when_configured_roots_are_not_usable() {
+        let policy =
+            AllowedWorkspaceRoots::from_env_value(Some(OsString::from("relative/path")), None);
+
+        let error = policy.resolve_allowed_directory("/tmp").unwrap_err();
+
+        assert!(error.contains(WORKSPACE_ROOTS_ENV));
+        assert!(error.contains("기존 절대 디렉터리가 없습니다"));
+        assert!(!error.contains("설정되지 않았습니다"));
     }
 
     #[test]
@@ -137,6 +164,7 @@ mod tests {
         fs::create_dir_all(&sibling).unwrap();
         let policy = AllowedWorkspaceRoots {
             roots: vec![fs::canonicalize(&allowed).unwrap()],
+            was_configured: true,
         };
 
         assert_eq!(
@@ -187,6 +215,7 @@ mod tests {
         symlink(&outside, allowed.join("escape")).unwrap();
         let policy = AllowedWorkspaceRoots {
             roots: vec![fs::canonicalize(&allowed).unwrap()],
+            was_configured: true,
         };
 
         assert!(policy
