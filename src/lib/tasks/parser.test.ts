@@ -4,6 +4,7 @@ import { parseIssueTitle } from "#/lib/tasks/parse-issue-title";
 import {
 	addTask,
 	deleteTask,
+	findUnsupportedTaskMarkdownLine,
 	moveTask,
 	parseTaskMarkdown,
 	tasksToMarkdown,
@@ -44,6 +45,55 @@ describe("parseTaskMarkdown", () => {
 			"todo",
 			"done",
 		]);
+	});
+
+	it("직렬화한 작업 문법을 손실 없이 다시 읽는다", () => {
+		const serialized = tasksToMarkdown(parseTaskMarkdown(SAMPLE));
+		const reparsed = parseTaskMarkdown(serialized);
+
+		expect(findUnsupportedTaskMarkdownLine(serialized)).toBeNull();
+		expect(reparsed.tasks["in-progress"][0]).toMatchObject({
+			title: "DEMO-101 — Example work (↑ DEMO-100)",
+			note: "Local note",
+			checked: false,
+			subtasks: [{ text: "Add a focused test", checked: true }],
+		});
+	});
+
+	it("파서가 보존할 수 없는 비어 있지 않은 원문 행을 찾는다", () => {
+		expect(
+			findUnsupportedTaskMarkdownLine(
+				"# Tasks\n\n직접 작성한 메모\n\n## Todo\n- [ ] **작업**\n",
+			),
+		).toBe(3);
+	});
+
+	it("굵게 표시 구분자가 제목 안에 들어간 작업을 안전하지 않은 원문으로 판단한다", () => {
+		const content = "# Tasks\n\n## Todo\n- [ ] **a ** b**\n";
+		expect(findUnsupportedTaskMarkdownLine(content)).toBe(4);
+		const board = parseTaskMarkdown("# Tasks\n\n## Todo\n- [ ] **작업**\n");
+		board.tasks.todo[0].title = "a ** b";
+		expect(() => tasksToMarkdown(board)).toThrow(
+			"제목에는 Markdown 굵게 표시 기호(**)를 사용할 수 없습니다.",
+		);
+	});
+
+	it("비대칭 섹션 굵게 표시는 읽기 전용으로 거절한다", () => {
+		for (const heading of [
+			"## Todo**",
+			"## **Todo",
+			"## *Todo",
+			"## **Todo**later**",
+			"## **Todo** and **Later**",
+			"## **To**do**",
+		]) {
+			const content = `# Tasks\n\n${heading}\n- [ ] **작업**\n`;
+			expect(findUnsupportedTaskMarkdownLine(content)).toBe(3);
+		}
+
+		const supported = "# Tasks\n\n## **Todo**\n- [ ] **작업**\n";
+		expect(findUnsupportedTaskMarkdownLine(supported)).toBeNull();
+		expect(parseTaskMarkdown(supported).tasks.todo[0]?.title).toBe("작업");
 	});
 });
 

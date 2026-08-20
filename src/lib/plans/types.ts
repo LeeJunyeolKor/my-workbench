@@ -1,7 +1,3 @@
-import type { AgentSessionInfo } from "#/lib/agent-sessions";
-import type { RelatedBranchInfo } from "#/lib/branch-links";
-import type { WorktreeInfo } from "#/lib/worktree";
-
 export type PlanSummary = {
 	taskId: string;
 	title: string;
@@ -37,7 +33,4 @@ export type PlanDetail = {
 	repo?: string;
 	issueUrl?: string;
 	files: PlanFile[];
-	worktrees?: WorktreeInfo[];
-	branches?: RelatedBranchInfo[];
-	agentSessions?: AgentSessionInfo[];
 };

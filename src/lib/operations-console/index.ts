@@ -1,22 +1,15 @@
-import type { ConnectorResult } from "#/lib/connectors/types";
 import type { PlanSummary } from "#/lib/plans/types";
 import type { TaskBoardData } from "#/lib/tasks/types";
-import type { WorktreeInfo } from "#/lib/worktree";
 
 export type OperationsConsoleTone =
 	| "neutral"
 	| "blue"
-	| "amber"
 	| "green"
 	| "violet"
 	| "red";
 
-export type OperationsConsoleKind = "task" | "connector" | "plan" | "worktree";
-export type OperationsConsoleSourceKey =
-	| "tasks"
-	| "connectors"
-	| "plans"
-	| "worktrees";
+export type OperationsConsoleKind = "task" | "plan";
+export type OperationsConsoleSourceKey = "tasks" | "plans";
 export type OperationsConsoleSourceStatus = "ok" | "unavailable";
 
 export type OperationsConsoleSourceSnapshot<T> = {
@@ -25,7 +18,6 @@ export type OperationsConsoleSourceSnapshot<T> = {
 	status: OperationsConsoleSourceStatus;
 	data?: T;
 	message?: string;
-	readAt?: string;
 };
 
 export type OperationsConsoleSourceState = {
@@ -34,30 +26,23 @@ export type OperationsConsoleSourceState = {
 	status: OperationsConsoleSourceStatus;
 	count: number;
 	message?: string;
-	readAt?: string;
 };
 
 export type OperationsConsoleItem = {
 	key: string;
 	id: string;
 	kind: OperationsConsoleKind;
-	repo: string;
 	title: string;
 	status: string;
 	statusTone: OperationsConsoleTone;
-	reviewer: string;
-	ci: string;
-	ciTone: OperationsConsoleTone;
-	updated: string;
 	source: string;
-	target: string;
-	risk: string;
-	planProgress: number;
-	url?: string;
+	detail: string;
+	updated: string;
+	progress: number;
 };
 
 export type OperationsConsoleMetric = {
-	key: "tasks" | "connectors" | "plans" | "worktrees";
+	key: OperationsConsoleSourceKey;
 	label: string;
 	value: string;
 	detail: string;
@@ -65,7 +50,6 @@ export type OperationsConsoleMetric = {
 };
 
 export type OperationsConsoleViewModel = {
-	generatedAt: string;
 	items: OperationsConsoleItem[];
 	metrics: OperationsConsoleMetric[];
 	sources: OperationsConsoleSourceState[];
@@ -74,20 +58,13 @@ export type OperationsConsoleViewModel = {
 export type OperationsConsoleInput = {
 	now?: Date;
 	tasks?: OperationsConsoleSourceSnapshot<TaskBoardData>;
-	connectors?: OperationsConsoleSourceSnapshot<ConnectorResult[]>;
 	plans?: OperationsConsoleSourceSnapshot<PlanSummary[]>;
-	worktrees?: OperationsConsoleSourceSnapshot<WorktreeInfo[]>;
 };
 
-const sourceDefaults: Record<
-	OperationsConsoleSourceKey,
-	Pick<OperationsConsoleSourceState, "key" | "label">
-> = {
-	tasks: { key: "tasks", label: "Tasks" },
-	connectors: { key: "connectors", label: "Connectors" },
-	plans: { key: "plans", label: "Plans" },
-	worktrees: { key: "worktrees", label: "Worktrees" },
-};
+const sourceDefaults = {
+	tasks: { key: "tasks", label: "작업" },
+	plans: { key: "plans", label: "계획" },
+} as const;
 
 export function buildOperationsConsoleViewModel(
 	input: OperationsConsoleInput,
@@ -96,150 +73,96 @@ export function buildOperationsConsoleViewModel(
 	const board = input.tasks?.data;
 	const tasks = board
 		? board.sections.flatMap((section) =>
-				(board.tasks[section.id] ?? []).map((task) => ({ task, section })),
+				(board.tasks[section.id] ?? []).map((task) => ({ section, task })),
 			)
 		: [];
-	const connectors = input.connectors?.data ?? [];
-	const connectorItems = connectors.flatMap((connector) =>
-		connector.items.map((item) => ({ connector, item })),
-	);
 	const plans = input.plans?.data ?? [];
-	const worktrees = input.worktrees?.data ?? [];
-	const items = [
-		...tasks.map(({ task, section }) => ({
+
+	const taskItems = tasks.map(({ section, task }) => {
+		const completedSubtasks = task.subtasks.filter(
+			(subtask) => subtask.checked,
+		).length;
+		const progress = task.subtasks.length
+			? Math.round((completedSubtasks / task.subtasks.length) * 100)
+			: task.checked
+				? 100
+				: 0;
+
+		return {
 			key: `task:${task.id}`,
 			id: task.id,
 			kind: "task" as const,
-			repo: "Local board",
 			title: task.title,
 			status: section.name,
 			statusTone: task.checked ? ("green" as const) : ("blue" as const),
-			reviewer: "—",
-			ci:
-				task.subtasks.length > 0
-					? `${task.subtasks.filter((subtask) => subtask.checked).length}/${task.subtasks.length}`
-					: "—",
-			ciTone: "neutral" as const,
-			updated: "Local",
 			source: "TASKS.md",
-			target: section.name,
-			risk: task.note ? "Notes" : "None",
-			planProgress:
-				task.subtasks.length > 0
-					? Math.round(
-							(task.subtasks.filter((subtask) => subtask.checked).length /
-								task.subtasks.length) *
-								100,
-						)
-					: 0,
-			url: "/tasks",
-		})),
-		...connectorItems.map(({ connector, item }) => ({
-			key: `connector:${connector.id}:${item.id}`,
-			id: item.id,
-			kind: "connector" as const,
-			repo: item.repository ?? connector.label,
-			title: item.title,
-			status: item.status,
-			statusTone: "violet" as const,
-			reviewer: connector.label,
-			ci: "—",
-			ciTone: "neutral" as const,
-			updated: item.updatedAt ? relativeTime(item.updatedAt, now) : "—",
-			source: item.branch ?? connector.label,
-			target: item.kind,
-			risk: "External",
-			planProgress: 0,
-			url: item.url,
-		})),
-		...plans.slice(0, 12).map((plan) => ({
+			detail:
+				task.note ||
+				(task.subtasks.length
+					? `세부 작업 ${completedSubtasks}/${task.subtasks.length}`
+					: "세부 작업 없음"),
+			updated: "로컬",
+			progress,
+		};
+	});
+
+	const planItems = plans.map((plan) => {
+		const complete =
+			plan.progressTotal > 0 && plan.progressDone === plan.progressTotal;
+		const progress = plan.progressTotal
+			? Math.round((plan.progressDone / plan.progressTotal) * 100)
+			: 0;
+
+		return {
 			key: `plan:${plan.taskId}`,
 			id: plan.taskId,
 			kind: "plan" as const,
-			repo: plan.repo ?? "Plans",
 			title: plan.title,
-			status:
-				plan.progressTotal > 0 && plan.progressDone === plan.progressTotal
-					? "Complete"
-					: "In progress",
-			statusTone:
-				plan.progressTotal > 0 && plan.progressDone === plan.progressTotal
-					? ("green" as const)
-					: ("violet" as const),
-			reviewer: "—",
-			ci: `${plan.progressDone}/${plan.progressTotal}`,
-			ciTone: "neutral" as const,
-			updated: relativeTime(plan.modifiedAt, now),
-			source: "Plan",
-			target: "Implementation",
-			risk: "Local",
-			planProgress:
+			status: complete ? "완료" : "진행 중",
+			statusTone: complete ? ("green" as const) : ("violet" as const),
+			source: plan.repo ?? "로컬 계획",
+			detail:
 				plan.progressTotal > 0
-					? Math.round((plan.progressDone / plan.progressTotal) * 100)
-					: 0,
-			url: `/plans/${encodeURIComponent(plan.taskId)}`,
-		})),
-		...worktrees.slice(0, 12).map((worktree) => ({
-			key: `worktree:${worktree.path}`,
-			id: worktree.issueKey ?? worktree.branch,
-			kind: "worktree" as const,
-			repo: worktree.repoName,
-			title: worktree.issueTitle ?? (worktree.commitMessage || worktree.branch),
-			status: worktree.isDirty ? `${worktree.dirtyCount} changed` : "Clean",
-			statusTone: worktree.isDirty ? ("amber" as const) : ("green" as const),
-			reviewer: "—",
-			ci: "—",
-			ciTone: "neutral" as const,
-			updated: "Local",
-			source: worktree.branch,
-			target: worktree.type,
-			risk: worktree.isDirty ? "Uncommitted" : "None",
-			planProgress: worktree.associatedPlan?.progress ?? 0,
-			url: "/worktrees",
-		})),
-	];
+					? `계획 항목 ${plan.progressDone}/${plan.progressTotal}`
+					: "체크할 계획 항목 없음",
+			updated: relativeTime(plan.modifiedAt, now),
+			progress,
+		};
+	});
+
+	const openTaskCount = tasks.filter(({ task }) => !task.checked).length;
+	const completePlanCount = plans.filter(
+		(plan) =>
+			plan.progressTotal > 0 && plan.progressDone === plan.progressTotal,
+	).length;
+	const tasksUnavailable = input.tasks?.status !== "ok";
+	const plansUnavailable = input.plans?.status !== "ok";
 
 	return {
-		generatedAt: now.toISOString(),
-		items,
+		items: [...taskItems, ...planItems],
 		metrics: [
 			{
 				key: "tasks",
-				label: "Tasks",
-				value: String(tasks.length),
-				detail: "Local board",
+				label: "작업",
+				value: tasksUnavailable ? "—" : String(tasks.length),
+				detail: tasksUnavailable
+					? "데이터를 읽지 못함"
+					: `${openTaskCount}개 진행 필요`,
 				tone: "blue",
 			},
 			{
-				key: "connectors",
-				label: "Connectors",
-				value: String(connectors.length),
-				detail:
-					connectorItems.length > 0
-						? `${connectorItems.length} external items`
-						: "No providers configured",
-				tone: "neutral",
-			},
-			{
 				key: "plans",
-				label: "Plans",
-				value: String(plans.length),
-				detail: "Implementation plans",
+				label: "구현 계획",
+				value: plansUnavailable ? "—" : String(plans.length),
+				detail: plansUnavailable
+					? "데이터를 읽지 못함"
+					: `${completePlanCount}개 완료`,
 				tone: "violet",
-			},
-			{
-				key: "worktrees",
-				label: "Worktrees",
-				value: String(worktrees.length),
-				detail: `${worktrees.filter((worktree) => worktree.isDirty).length} with changes`,
-				tone: "green",
 			},
 		],
 		sources: [
 			toSourceState(input.tasks, tasks.length, "tasks"),
-			toSourceState(input.connectors, connectorItems.length, "connectors"),
 			toSourceState(input.plans, plans.length, "plans"),
-			toSourceState(input.worktrees, worktrees.length, "worktrees"),
 		],
 	};
 }
@@ -254,7 +177,6 @@ function toSourceState<T>(
 		status: snapshot?.status ?? "unavailable",
 		count,
 		message: snapshot?.message,
-		readAt: snapshot?.readAt,
 	};
 }
 
@@ -262,8 +184,8 @@ function relativeTime(value: string, now: Date) {
 	const milliseconds = now.getTime() - new Date(value).getTime();
 	if (!Number.isFinite(milliseconds)) return "—";
 	const minutes = Math.max(0, Math.round(milliseconds / 60_000));
-	if (minutes < 60) return `${minutes}m ago`;
+	if (minutes < 60) return `${minutes}분 전`;
 	const hours = Math.round(minutes / 60);
-	if (hours < 24) return `${hours}h ago`;
-	return `${Math.round(hours / 24)}d ago`;
+	if (hours < 24) return `${hours}시간 전`;
+	return `${Math.round(hours / 24)}일 전`;
 }

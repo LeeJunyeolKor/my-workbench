@@ -18,23 +18,23 @@ describe("AgentWorkspacePanel", () => {
 
 		expect(screen.getByText("데스크톱 앱이 필요합니다")).toBeTruthy();
 		expect(
-			screen.getByLabelText("Local repository path").hasAttribute("disabled"),
+			screen.getByLabelText("로컬 저장소 경로").hasAttribute("disabled"),
 		).toBe(true);
 		expect(
-			screen.getByRole("button", { name: "Set" }).hasAttribute("disabled"),
+			screen.getByRole("button", { name: "선택" }).hasAttribute("disabled"),
 		).toBe(true);
-		expect(screen.getByLabelText("Agent runner").hasAttribute("disabled")).toBe(
-			true,
-		);
-		expect(screen.getByLabelText("Task prompt").hasAttribute("disabled")).toBe(
+		expect(
+			screen.getByLabelText("에이전트 실행기").hasAttribute("disabled"),
+		).toBe(true);
+		expect(screen.getByLabelText("작업 지시").hasAttribute("disabled")).toBe(
 			true,
 		);
 		expect(
 			screen
-				.getByRole("button", { name: "Start task" })
+				.getByRole("button", { name: "작업 시작" })
 				.hasAttribute("disabled"),
 		).toBe(true);
-		expect(screen.queryByText("Task completed successfully")).toBeNull();
+		expect(screen.queryByText("작업을 완료했습니다.")).toBeNull();
 		expect(screen.queryByText("src/lib/tauri-ipc.ts")).toBeNull();
 	});
 
@@ -50,12 +50,12 @@ describe("AgentWorkspacePanel", () => {
 		await waitFor(() => {
 			expect(
 				screen
-					.getByRole("button", { name: "Start task" })
+					.getByRole("button", { name: "작업 시작" })
 					.hasAttribute("disabled"),
 			).toBe(false);
 		});
 		expect(
-			(screen.getByLabelText("Agent runner") as HTMLSelectElement).value,
+			(screen.getByLabelText("에이전트 실행기") as HTMLSelectElement).value,
 		).toBe("codex");
 		expect(
 			screen.queryByRole("option", { name: "Mock test runner" }),

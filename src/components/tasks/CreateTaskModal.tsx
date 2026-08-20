@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
 import { ModalSurface } from "#/components/ui/ModalSurface";
+import {
+	hasUnsupportedTaskTitle,
+	UNSUPPORTED_TASK_TITLE_MESSAGE,
+} from "#/lib/tasks/parser";
 import type { Task, TaskSection } from "#/lib/tasks/types";
 
 type CreateTaskModalProps = {
@@ -7,6 +11,7 @@ type CreateTaskModalProps = {
 	sections: TaskSection[];
 	onClose: () => void;
 	onCreate: (task: Task) => void;
+	readOnlyReason?: string | null;
 };
 
 export function CreateTaskModal({
@@ -14,6 +19,7 @@ export function CreateTaskModal({
 	sections,
 	onClose,
 	onCreate,
+	readOnlyReason,
 }: CreateTaskModalProps) {
 	const [title, setTitle] = useState("");
 	const [note, setNote] = useState("");
@@ -40,6 +46,7 @@ export function CreateTaskModal({
 	}, [isOpen, onClose]);
 
 	if (!isOpen) return null;
+	const hasUnsupportedTitle = hasUnsupportedTaskTitle(title);
 
 	return (
 		<div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/70 p-4 backdrop-blur-sm">
@@ -47,6 +54,7 @@ export function CreateTaskModal({
 				<form
 					onSubmit={(event) => {
 						event.preventDefault();
+						if (readOnlyReason || hasUnsupportedTitle) return;
 						const trimmedTitle = title.trim();
 						if (!trimmedTitle) return;
 						onCreate({
@@ -79,26 +87,40 @@ export function CreateTaskModal({
 						</button>
 					</header>
 					<div className="space-y-4 p-6">
+						{readOnlyReason ? (
+							<p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
+								{readOnlyReason}
+							</p>
+						) : null}
 						<label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-300">
 							제목
 							<input
 								value={title}
+								disabled={Boolean(readOnlyReason)}
 								onChange={(event) => setTitle(event.target.value)}
 								className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 font-normal text-zinc-900 outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
 							/>
+							{hasUnsupportedTitle ? (
+								<span className="mt-1 block text-xs text-red-600" role="alert">
+									{UNSUPPORTED_TASK_TITLE_MESSAGE}
+								</span>
+							) : null}
 						</label>
 						<label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-300">
 							메모
-							<textarea
+							<input
+								type="text"
 								value={note}
+								disabled={Boolean(readOnlyReason)}
 								onChange={(event) => setNote(event.target.value)}
-								className="mt-1 min-h-24 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 font-normal text-zinc-900 outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
+								className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 font-normal text-zinc-900 outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
 							/>
 						</label>
 						<label className="block text-sm font-semibold text-zinc-700 dark:text-zinc-300">
 							상태
 							<select
 								value={section}
+								disabled={Boolean(readOnlyReason)}
 								onChange={(event) => setSection(event.target.value)}
 								className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 font-normal text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
 							>
@@ -120,7 +142,9 @@ export function CreateTaskModal({
 						</button>
 						<button
 							type="submit"
-							disabled={!title.trim()}
+							disabled={
+								Boolean(readOnlyReason) || !title.trim() || hasUnsupportedTitle
+							}
 							className="rounded-md px-3 py-2 text-sm font-semibold disabled:opacity-50"
 							style={{
 								background: "var(--workbench-btn-primary)",

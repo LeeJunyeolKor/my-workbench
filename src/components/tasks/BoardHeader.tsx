@@ -7,6 +7,7 @@ type BoardHeaderProps = {
 	onCreateTask: () => void;
 	statusMessage?: string | null;
 	saving?: boolean;
+	readOnly?: boolean;
 };
 
 export function BoardHeader({
@@ -16,6 +17,7 @@ export function BoardHeader({
 	onCreateTask,
 	statusMessage,
 	saving = false,
+	readOnly = false,
 }: BoardHeaderProps) {
 	return (
 		<div className="flex shrink-0 flex-wrap items-center justify-between gap-4 px-4 pb-3 pt-4">
@@ -24,7 +26,9 @@ export function BoardHeader({
 					{title}
 				</h1>
 				<p className="text-sm dark:text-zinc-300 text-zinc-650">
-					로컬 작업 · 드래그하여 진행 상태 변경
+					{readOnly
+						? "로컬 작업 · 읽기 전용"
+						: "로컬 작업 · 드래그하여 진행 상태 변경"}
 					{saving ? " · 저장 중…" : null}
 					{statusMessage ? ` · ${statusMessage}` : null}
 				</p>
@@ -49,7 +53,8 @@ export function BoardHeader({
 				<button
 					type="button"
 					onClick={onCreateTask}
-					className="rounded-md px-3 py-1.5 text-sm font-semibold transition border bg-zinc-150 hover:bg-zinc-200 border-zinc-350 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-950 dark:text-zinc-50 dark:border-zinc-700"
+					disabled={readOnly}
+					className="rounded-md px-3 py-1.5 text-sm font-semibold transition border bg-zinc-150 hover:bg-zinc-200 border-zinc-350 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-950 dark:text-zinc-50 dark:border-zinc-700 disabled:cursor-not-allowed disabled:opacity-50"
 				>
 					작업 추가
 				</button>

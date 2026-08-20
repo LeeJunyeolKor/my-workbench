@@ -10,11 +10,8 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AgentSettingsRouteImport } from './routes/agent-settings'
 import { Route as AgentSliceRouteImport } from './routes/agent-slice'
-import { Route as DesignPreviewRouteImport } from './routes/design-preview'
 import { Route as TasksRouteImport } from './routes/tasks'
-import { Route as WorktreesRouteImport } from './routes/worktrees'
 import { Route as PlansIndexRouteImport } from './routes/plans/index'
 import { Route as PlansTaskIdRouteImport } from './routes/plans/$taskId'
 
@@ -23,29 +20,14 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AgentSettingsRoute = AgentSettingsRouteImport.update({
-  id: '/agent-settings',
-  path: '/agent-settings',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AgentSliceRoute = AgentSliceRouteImport.update({
   id: '/agent-slice',
   path: '/agent-slice',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DesignPreviewRoute = DesignPreviewRouteImport.update({
-  id: '/design-preview',
-  path: '/design-preview',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const TasksRoute = TasksRouteImport.update({
   id: '/tasks',
   path: '/tasks',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const WorktreesRoute = WorktreesRouteImport.update({
-  id: '/worktrees',
-  path: '/worktrees',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PlansIndexRoute = PlansIndexRouteImport.update({
@@ -61,75 +43,39 @@ const PlansTaskIdRoute = PlansTaskIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/agent-settings': typeof AgentSettingsRoute
   '/agent-slice': typeof AgentSliceRoute
-  '/design-preview': typeof DesignPreviewRoute
   '/tasks': typeof TasksRoute
-  '/worktrees': typeof WorktreesRoute
   '/plans/$taskId': typeof PlansTaskIdRoute
   '/plans/': typeof PlansIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/agent-settings': typeof AgentSettingsRoute
   '/agent-slice': typeof AgentSliceRoute
-  '/design-preview': typeof DesignPreviewRoute
   '/tasks': typeof TasksRoute
-  '/worktrees': typeof WorktreesRoute
   '/plans/$taskId': typeof PlansTaskIdRoute
   '/plans': typeof PlansIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/agent-settings': typeof AgentSettingsRoute
   '/agent-slice': typeof AgentSliceRoute
-  '/design-preview': typeof DesignPreviewRoute
   '/tasks': typeof TasksRoute
-  '/worktrees': typeof WorktreesRoute
   '/plans/$taskId': typeof PlansTaskIdRoute
   '/plans/': typeof PlansIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    | '/'
-    | '/agent-settings'
-    | '/agent-slice'
-    | '/design-preview'
-    | '/tasks'
-    | '/worktrees'
-    | '/plans/$taskId'
-    | '/plans/'
+  fullPaths: '/' | '/agent-slice' | '/tasks' | '/plans/$taskId' | '/plans/'
   fileRoutesByTo: FileRoutesByTo
-  to:
-    | '/'
-    | '/agent-settings'
-    | '/agent-slice'
-    | '/design-preview'
-    | '/tasks'
-    | '/worktrees'
-    | '/plans/$taskId'
-    | '/plans'
+  to: '/' | '/agent-slice' | '/tasks' | '/plans/$taskId' | '/plans'
   id:
-    | '__root__'
-    | '/'
-    | '/agent-settings'
-    | '/agent-slice'
-    | '/design-preview'
-    | '/tasks'
-    | '/worktrees'
-    | '/plans/$taskId'
-    | '/plans/'
+    '__root__' | '/' | '/agent-slice' | '/tasks' | '/plans/$taskId' | '/plans/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AgentSettingsRoute: typeof AgentSettingsRoute
   AgentSliceRoute: typeof AgentSliceRoute
-  DesignPreviewRoute: typeof DesignPreviewRoute
   TasksRoute: typeof TasksRoute
-  WorktreesRoute: typeof WorktreesRoute
   PlansTaskIdRoute: typeof PlansTaskIdRoute
   PlansIndexRoute: typeof PlansIndexRoute
 }
@@ -143,13 +89,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/agent-settings': {
-      id: '/agent-settings'
-      path: '/agent-settings'
-      fullPath: '/agent-settings'
-      preLoaderRoute: typeof AgentSettingsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/agent-slice': {
       id: '/agent-slice'
       path: '/agent-slice'
@@ -157,25 +96,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AgentSliceRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/design-preview': {
-      id: '/design-preview'
-      path: '/design-preview'
-      fullPath: '/design-preview'
-      preLoaderRoute: typeof DesignPreviewRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/tasks': {
       id: '/tasks'
       path: '/tasks'
       fullPath: '/tasks'
       preLoaderRoute: typeof TasksRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/worktrees': {
-      id: '/worktrees'
-      path: '/worktrees'
-      fullPath: '/worktrees'
-      preLoaderRoute: typeof WorktreesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/plans/': {
@@ -197,11 +122,8 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AgentSettingsRoute: AgentSettingsRoute,
   AgentSliceRoute: AgentSliceRoute,
-  DesignPreviewRoute: DesignPreviewRoute,
   TasksRoute: TasksRoute,
-  WorktreesRoute: WorktreesRoute,
   PlansTaskIdRoute: PlansTaskIdRoute,
   PlansIndexRoute: PlansIndexRoute,
 }
