@@ -31,37 +31,6 @@ function resolveRelativePath(currentFile: string, href: string): string {
 	return parts.join("/");
 }
 
-declare global {
-	interface Window {
-		mermaid?: {
-			initialize: (config: Record<string, unknown>) => void;
-			run: (options: { nodes: NodeListOf<Element> }) => Promise<void>;
-		};
-	}
-}
-
-const MERMAID_SRC =
-	"https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js";
-
-function loadMermaidScript(): Promise<void> {
-	if (window.mermaid) return Promise.resolve();
-	const existing = document.querySelector(`script[src="${MERMAID_SRC}"]`);
-	if (existing) {
-		return new Promise((resolve) => {
-			existing.addEventListener("load", () => resolve(), { once: true });
-		});
-	}
-
-	return new Promise((resolve, reject) => {
-		const script = document.createElement("script");
-		script.src = MERMAID_SRC;
-		script.async = true;
-		script.onload = () => resolve();
-		script.onerror = () => reject(new Error("Failed to load mermaid"));
-		document.head.appendChild(script);
-	});
-}
-
 export const PlanMarkdown = memo(function PlanMarkdown({
 	html,
 	raw,
@@ -70,34 +39,6 @@ export const PlanMarkdown = memo(function PlanMarkdown({
 	const [showRaw, setShowRaw] = useState(false);
 	const contentRef = useRef<HTMLDivElement>(null);
 	const navigate = useNavigate({ from: "/plans/$taskId" });
-
-	// biome-ignore lint/correctness/useExhaustiveDependencies: html changes replace the injected markdown content and must re-run Mermaid rendering
-	useEffect(() => {
-		if (showRaw || !contentRef.current) return;
-		const nodes = contentRef.current.querySelectorAll("pre.mermaid");
-		if (nodes.length === 0) return;
-
-		let cancelled = false;
-		loadMermaidScript()
-			.then(() => {
-				if (cancelled || !window.mermaid || !contentRef.current) return;
-				window.mermaid.initialize({
-					startOnLoad: false,
-					theme: "dark",
-					securityLevel: "strict",
-				});
-				return window.mermaid.run({
-					nodes: contentRef.current.querySelectorAll("pre.mermaid"),
-				});
-			})
-			.catch(() => {
-				// mermaid optional — static pre remains
-			});
-
-		return () => {
-			cancelled = true;
-		};
-	}, [html, showRaw]);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: html changes replace heading anchors and must re-run hash scrolling
 	useEffect(() => {
@@ -209,7 +150,7 @@ export const PlanMarkdown = memo(function PlanMarkdown({
 				<div
 					ref={contentRef}
 					className={cn(PLAN_MARKDOWN_CLASSNAME, "prose-headings:scroll-mt-24")}
-					// biome-ignore lint/security/noDangerouslySetInnerHtml: trusted local plan.md rendered server-side
+					// biome-ignore lint/security/noDangerouslySetInnerHtml: renderPlanHtml escapes raw HTML and executable URL schemes before injection
 					dangerouslySetInnerHTML={{ __html: html }}
 				/>
 			)}

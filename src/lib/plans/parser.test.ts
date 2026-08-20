@@ -58,6 +58,38 @@ describe("renderPlanHtml", () => {
 		const html = renderPlanHtml("## Hello World\n\nBody");
 		expect(html).toContain('id="hello-world"');
 	});
+
+	it("renders raw HTML and executable URLs as inert text", () => {
+		const html = renderPlanHtml(`## <img src=x onerror="alert(1)">
+
+<script>alert(1)</script>
+
+[unsafe](javascript:alert(1))
+
+![unsafe image](data:text/html;base64,PHNjcmlwdD4=)
+
+\`\`\`mermaid
+<img src=x onerror="alert(1)">
+\`\`\`
+`);
+
+		expect(html).not.toContain("<script>");
+		expect(html).not.toContain("<img src=x");
+		expect(html).not.toMatch(/(?:href|src)="(?:javascript|data):/i);
+		expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+		expect(html).toContain(
+			'<pre class="mermaid">&lt;img src=x onerror=&quot;alert(1)&quot;&gt;</pre>',
+		);
+	});
+
+	it("keeps supported links and images", () => {
+		const html = renderPlanHtml(
+			"[docs](https://example.test?a=1&b=2) ![diagram](./diagram.png)",
+		);
+
+		expect(html).toContain('href="https://example.test?a=1&amp;b=2"');
+		expect(html).toContain('src="./diagram.png"');
+	});
 });
 
 describe("summarizePlan", () => {

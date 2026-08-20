@@ -21,6 +21,8 @@ export interface Workspace {
 	name: string;
 }
 
+export type AgentType = "codex" | "claude";
+
 export type TaskState =
 	| "Created"
 	| "Preparing"
@@ -116,6 +118,16 @@ export interface TaskViewState {
 	error: string | null;
 }
 
+const MAX_TASK_LOGS = 500;
+let nextTaskLogId = 1;
+
+export function appendTaskLog(
+	logs: TaskLogEntry[],
+	log: TaskLogEntry,
+): TaskLogEntry[] {
+	return [...logs.slice(-(MAX_TASK_LOGS - 1)), log];
+}
+
 export function taskStatusFromViewState(
 	state: TaskViewState,
 ): TaskStatus | null {
@@ -162,17 +174,15 @@ function appendLog(
 	stream: TaskLogStream,
 	text: string,
 ): TaskViewState {
+	const log: TaskLogEntry = {
+		id: `log-${nextTaskLogId++}`,
+		time: new Date().toLocaleTimeString(),
+		stream,
+		text,
+	};
 	return {
 		...state,
-		logs: [
-			...state.logs,
-			{
-				id: `log-${state.logs.length + 1}-${Date.now()}`,
-				time: new Date().toLocaleTimeString(),
-				stream,
-				text,
-			},
-		],
+		logs: appendTaskLog(state.logs, log),
 	};
 }
 
@@ -295,7 +305,7 @@ export type TaskExecutionMode = "new-worktree" | "existing-worktree";
 export async function startAgentTask(
 	workspacePath: string,
 	prompt: string,
-	agentType = "mock",
+	agentType: AgentType = "codex",
 	executionMode: TaskExecutionMode = "new-worktree",
 ): Promise<Task> {
 	requireTauriRuntime();

@@ -7,6 +7,18 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 
 describe("PlanMarkdown", () => {
+	it("keeps Mermaid blocks static without loading a remote script", () => {
+		render(
+			<PlanMarkdown
+				html={'<pre class="mermaid">graph TD; A--&gt;B;</pre>'}
+				raw={"```mermaid\ngraph TD; A-->B;\n```"}
+			/>,
+		);
+
+		expect(screen.getByText("graph TD; A-->B;")).toBeTruthy();
+		expect(document.head.querySelector('script[src*="mermaid"]')).toBeNull();
+	});
+
 	it("labels the view mode toggle and exposes the selected mode", () => {
 		render(<PlanMarkdown html="<p>렌더링된 문서</p>" raw="# 원문" />);
 

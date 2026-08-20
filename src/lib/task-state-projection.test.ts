@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	type AgentEvent,
+	appendTaskLog,
 	createTaskViewState,
 	projectTaskState,
 	type Task,
@@ -141,5 +142,48 @@ describe("projectTaskState", () => {
 		);
 
 		expect(next).toBe(state);
+	});
+
+	it("keeps only the 500 most recent task logs", () => {
+		let state = createTaskViewState(createTask("task-logs"));
+
+		for (let index = 0; index < 510; index += 1) {
+			state = projectTaskState(
+				state,
+				eventWithTask({
+					type: "Output",
+					payload: {
+						task_id: "task-logs",
+						stream: "Stdout",
+						content: `log-${index}`,
+					},
+				}),
+			);
+		}
+
+		expect(state.logs).toHaveLength(500);
+		expect(state.logs[0]?.text).toBe("log-10");
+		expect(state.logs.at(-1)?.text).toBe("log-509");
+		expect(new Set(state.logs.map((log) => log.id)).size).toBe(500);
+	});
+
+	it("caps locally appended system logs through the shared helper", () => {
+		const existingLogs = Array.from({ length: 500 }, (_, index) => ({
+			id: `existing-${index}`,
+			time: "00:00:00",
+			stream: "stdout" as const,
+			text: `log-${index}`,
+		}));
+
+		const logs = appendTaskLog(existingLogs, {
+			id: "local",
+			time: "00:00:01",
+			stream: "system",
+			text: "Cancellation requested",
+		});
+
+		expect(logs).toHaveLength(500);
+		expect(logs[0]?.id).toBe("existing-1");
+		expect(logs.at(-1)?.id).toBe("local");
 	});
 });

@@ -19,10 +19,14 @@ pnpm dev
 데스크톱 앱 실행:
 
 ```bash
-pnpm tauri:dev
+WORKBENCH_WORKSPACE_ROOTS="$HOME/Projects" pnpm tauri:dev
 ```
 
 에이전트 실행, 취소, 변경 파일과 diff 확인은 데스크톱 앱에서만 사용할 수 있다. 브라우저에서는 해당 실행 입력과 버튼이 비활성화된다.
+
+Tauri 명령은 앱 시작 시 프로세스 환경의 `WORKBENCH_WORKSPACE_ROOTS`를 읽고, 실제 경로가 그 아래에 있는 Git 저장소만 허용한다. `.env` 값만으로는 데스크톱 IPC 권한이 생기지 않는다. Git 명령과 에이전트 CLI가 실행되므로 신뢰하는 저장소만 허용한다.
+
+현재 TanStack Start 서버 기능은 Tauri IPC로 이전되지 않아 배포 패키지를 만들 수 없다. `pnpm tauri:build`는 동작하지 않는 앱을 생성하지 않도록 정적 `index.html`이 없으면 실패한다.
 
 ## 프로젝트 문서
 
@@ -35,7 +39,7 @@ pnpm tauri:dev
 | --- | --- | --- |
 | `MY_WORKBENCH_DATA` | `TASKS.md`를 저장할 디렉터리 | `~/.my-workbench` |
 | `WORKBENCH_PLANS_DIR` | 저장된 계획 경로가 없을 때 사용할 구현 계획 디렉터리 | `~/.my-workbench/plans` |
-| `WORKBENCH_WORKSPACE_ROOTS` | Git 저장소를 탐색할 루트. 운영체제의 경로 구분자로 여러 경로를 구분 | 비어 있음 |
+| `WORKBENCH_WORKSPACE_ROOTS` | Git 저장소를 탐색하고 Tauri IPC에서 허용할 루트. 운영체제의 경로 구분자로 여러 경로를 구분 | 비어 있음 |
 
 환경변수 또는 워크트리 설정에서 스캔 루트를 지정하기 전에는 워크트리를 탐색하지 않는다. `WORKBENCH_WORKSPACE_ROOTS`를 사용할 때 macOS와 Linux에서는 여러 루트를 `:`로 구분한다.
 
@@ -47,6 +51,7 @@ pnpm tauri:dev
 pnpm test
 pnpm build
 pnpm check
+cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
 ## 라이선스와 공개 상태

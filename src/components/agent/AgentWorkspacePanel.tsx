@@ -16,6 +16,8 @@ import { surfaceClassName } from "#/components/ui/surfaceClassName";
 import { getErrorMessage } from "#/lib/errors";
 import {
 	type AgentEvent,
+	type AgentType,
+	appendTaskLog,
 	type ChangedFile,
 	type ChangeStatus,
 	cancelAgentTask,
@@ -111,15 +113,12 @@ function taskStatusLabel(status: TaskState | null): string {
 function appendSystemLog(state: TaskViewState, text: string): TaskViewState {
 	return {
 		...state,
-		logs: [
-			...state.logs,
-			{
-				id: `local-${state.logs.length + 1}-${Date.now()}`,
-				time: new Date().toLocaleTimeString(),
-				stream: "system",
-				text,
-			},
-		],
+		logs: appendTaskLog(state.logs, {
+			id: `local-${state.logs.length + 1}-${Date.now()}`,
+			time: new Date().toLocaleTimeString(),
+			stream: "system",
+			text,
+		}),
 	};
 }
 
@@ -146,7 +145,7 @@ export function AgentWorkspacePanel({
 	const [prompt, setPrompt] = useState(
 		"Add a helper utility to format timestamps and update README",
 	);
-	const [agentType, setAgentType] = useState("mock");
+	const [agentType, setAgentType] = useState<AgentType>("codex");
 	const [viewState, setViewState] = useState<TaskViewState>(() =>
 		createTaskViewState(),
 	);
@@ -722,11 +721,12 @@ export function AgentWorkspacePanel({
 						<select
 							id="agent-runner-type"
 							value={agentType}
-							onChange={(event) => setAgentType(event.target.value)}
+							onChange={(event) =>
+								setAgentType(event.target.value as AgentType)
+							}
 							disabled={!tauriRuntime || taskBusy}
 							className="w-full rounded-md border border-[#d0d7de] bg-white px-2.5 py-1.5 font-mono text-xs dark:border-[#30363d] dark:bg-[#0d1117] dark:text-[#c9d1d9]"
 						>
-							<option value="mock">Mock test runner</option>
 							<option value="codex">Codex CLI</option>
 							<option value="claude">Claude CLI</option>
 						</select>
