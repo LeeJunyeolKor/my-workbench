@@ -9,6 +9,29 @@ const ACCENTS = [
 	"var(--workbench-accent-yellow)",
 ] as const;
 
+const SAFE_URL_SCHEMES = new Set(["http:", "https:", "mailto:", "tel:"]);
+
+function escapeHtml(value: string): string {
+	return value.replace(
+		/[&<>"']/g,
+		(character) =>
+			({
+				"&": "&amp;",
+				"<": "&lt;",
+				">": "&gt;",
+				'"': "&quot;",
+				"'": "&#39;",
+			})[character] ?? character,
+	);
+}
+
+function isSafeMarkdownUrl(value: string): boolean {
+	// biome-ignore lint/suspicious/noControlCharactersInRegex: browser URL parsing ignores these characters inside schemes
+	const compact = value.replace(/[\u0000-\u0020\u007f-\u009f]/g, "");
+	const scheme = compact.match(/^[a-z][a-z0-9+.-]*:/i)?.[0].toLowerCase();
+	return scheme === undefined || SAFE_URL_SCHEMES.has(scheme);
+}
+
 export function slugifyHeading(text: string): string {
 	return text
 		.toLowerCase()
@@ -108,18 +131,40 @@ export function summarizePlan(
 export function renderPlanHtml(content: string): string {
 	const renderer = new marked.Renderer();
 
-	renderer.heading = ({ text, depth }) => {
-		const plain = text.replace(/<[^>]+>/g, "");
+	renderer.html = ({ text }) => escapeHtml(text);
+
+	renderer.heading = ({ tokens, depth }) => {
+		const text = renderer.parser.parseInline(tokens);
+		const plain = renderer.parser
+			.parseInline(tokens, renderer.parser.textRenderer)
+			.replace(/<[^>]+>/g, "");
 		const id = slugifyHeading(plain);
 		return `<h${depth} id="${id}">${text}</h${depth}>\n`;
 	};
 
 	renderer.code = ({ text, lang }) => {
-		if (lang === "mermaid") {
-			return `<pre class="mermaid">${text}</pre>\n`;
+		const escapedText = escapeHtml(text);
+		const language = lang?.match(/^\S+/)?.[0] ?? "";
+		if (language === "mermaid") {
+			return `<pre class="mermaid">${escapedText}</pre>\n`;
 		}
-		const escapedLang = lang ?? "";
-		return `<pre><code class="language-${escapedLang}">${text}</code></pre>\n`;
+		return `<pre><code class="language-${escapeHtml(language)}">${escapedText}</code></pre>\n`;
+	};
+
+	renderer.link = ({ href, title, tokens }) => {
+		const text = renderer.parser.parseInline(tokens);
+		if (!isSafeMarkdownUrl(href)) return text;
+		const titleAttribute = title ? ` title="${escapeHtml(title)}"` : "";
+		return `<a href="${escapeHtml(href)}"${titleAttribute}>${text}</a>`;
+	};
+
+	renderer.image = ({ href, title, text, tokens }) => {
+		const alt = tokens
+			? renderer.parser.parseInline(tokens, renderer.parser.textRenderer)
+			: text;
+		if (!isSafeMarkdownUrl(href)) return escapeHtml(alt);
+		const titleAttribute = title ? ` title="${escapeHtml(title)}"` : "";
+		return `<img src="${escapeHtml(href)}" alt="${escapeHtml(alt)}"${titleAttribute}>`;
 	};
 
 	return marked.parse(content, {

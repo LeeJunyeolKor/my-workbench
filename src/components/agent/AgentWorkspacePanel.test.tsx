@@ -54,6 +54,12 @@ describe("AgentWorkspacePanel", () => {
 					.hasAttribute("disabled"),
 			).toBe(false);
 		});
+		expect(
+			(screen.getByLabelText("Agent runner") as HTMLSelectElement).value,
+		).toBe("codex");
+		expect(
+			screen.queryByRole("option", { name: "Mock test runner" }),
+		).toBeNull();
 		expect(screen.queryByText("데스크톱 앱이 필요합니다")).toBeNull();
 		expect(listenMock).toHaveBeenCalledWith(
 			"my-workbench:agent-event",

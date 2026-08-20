@@ -85,6 +85,18 @@ describe("Tauri IPC wiring", () => {
 		});
 	});
 
+	it("defaults task execution to the Codex CLI in a new worktree", async () => {
+		invokeMock.mockResolvedValueOnce({ id: "task-1" });
+
+		await startAgentTask("/tmp/repo", "Run checks");
+
+		expect(invokeMock).toHaveBeenCalledWith("start_agent_task", {
+			workspacePath: "/tmp/repo",
+			prompt: "Run checks",
+			agentType: "codex",
+		});
+	});
+
 	it("forwards desktop events and returns the native cleanup", async () => {
 		const cleanup = vi.fn();
 		const callback = vi.fn();

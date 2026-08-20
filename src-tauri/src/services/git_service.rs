@@ -1,8 +1,31 @@
+use crate::services::path_policy::validate_relative_file_path;
 use serde::{Deserialize, Serialize};
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
+use std::process::{Output, Stdio};
+use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::process::Command;
+use tokio::sync::mpsc;
 
-const BINARY_DIFF_FALLBACK: &str = "Binary file — preview unavailable";
+const BINARY_DIFF_FALLBACK: &str = "바이너리 파일은 미리볼 수 없습니다.";
+const LARGE_DIFF_FALLBACK: &str = "파일이 1 MiB 미리보기 제한을 초과했습니다.";
+const LARGE_CHANGED_FILES_ERROR: &str = "변경 파일 목록이 1 MiB 제한을 초과했습니다.";
+const MAX_DIFF_PREVIEW_BYTES: usize = 1024 * 1024;
+
+enum BoundedCommandOutput {
+    Complete(Output),
+    TooLarge,
+}
+
+#[derive(Clone, Copy)]
+enum GitOutputStream {
+    Stdout,
+    Stderr,
+}
+
+struct BoundedOutput {
+    bytes: Vec<u8>,
+    exceeded: bool,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -23,80 +46,115 @@ pub struct ChangedFile {
 pub struct GitService;
 
 impl GitService {
-    pub async fn create_worktree(
-        repo_path: &str,
-        task_id: &str,
-    ) -> Result<(String, String), String> {
-        let repo_metadata = tokio::fs::metadata(repo_path)
+    pub async fn resolve_git_workspace(path: &Path) -> Result<PathBuf, String> {
+        let canonical = tokio::fs::canonicalize(path)
             .await
-            .map_err(|error| format!("Invalid repository path: {}", error))?;
-        if !repo_metadata.is_dir() {
-            return Err("Repository path must be a directory".to_string());
-        }
-
-        let branch_name = format!("my-workbench/wt-{}", task_id);
-        let worktree_dir_name = format!(".my-workbench-worktrees/wt-{}", task_id);
-        let worktree_full_path = Path::new(repo_path).join(&worktree_dir_name);
-
-        if let Some(parent) = worktree_full_path.parent() {
-            tokio::fs::create_dir_all(parent)
-                .await
-                .map_err(|e| format!("Failed to create worktree parent dir: {}", e))?;
+            .map_err(|error| format!("Invalid Git workspace path: {error}"))?;
+        let metadata = tokio::fs::metadata(&canonical)
+            .await
+            .map_err(|error| format!("Invalid Git workspace path: {error}"))?;
+        if !metadata.is_dir() {
+            return Err("Git workspace path must be a directory".to_string());
         }
 
         let output = Command::new("git")
-            .current_dir(repo_path)
-            .args([
-                "worktree",
-                "add",
-                "-b",
-                &branch_name,
-                worktree_full_path.to_str().unwrap_or_default(),
-            ])
+            .current_dir(&canonical)
+            .args(["rev-parse", "--show-toplevel"])
             .output()
             .await
-            .map_err(|error| format!("Failed to run git worktree add: {}", error))?;
-
-        if output.status.success() {
-            return Ok((
-                worktree_full_path.to_string_lossy().to_string(),
-                branch_name,
-            ));
-        }
-
-        let error = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        if !is_non_git_error(&error) {
+            .map_err(|error| format!("Failed to inspect Git workspace: {error}"))?;
+        if !output.status.success() {
+            let error = String::from_utf8_lossy(&output.stderr).trim().to_string();
             return Err(if error.is_empty() {
-                "git worktree add failed".to_string()
+                "Workspace must be a Git worktree".to_string()
             } else {
                 error
             });
         }
 
-        // A plain directory is an explicit preview workspace for a directory that is not a
-        // Git repository. Branch conflicts and other Git errors must be surfaced to the caller.
-        tokio::fs::create_dir_all(&worktree_full_path)
+        let reported_root = std::str::from_utf8(&output.stdout)
+            .map_err(|_| "Git worktree root must be a UTF-8 path".to_string())?
+            .trim();
+        let reported_root = tokio::fs::canonicalize(reported_root)
             .await
-            .map_err(|e| format!("Fallback dir creation failed: {}", e))?;
-        Ok((
-            worktree_full_path.to_string_lossy().to_string(),
-            branch_name,
-        ))
+            .map_err(|error| format!("Invalid Git worktree root: {error}"))?;
+        if reported_root != canonical {
+            return Err("Workspace path must point to a Git worktree root".to_string());
+        }
+
+        Ok(canonical)
+    }
+
+    pub async fn create_worktree(
+        repo_path: &str,
+        task_id: &str,
+    ) -> Result<(String, String), String> {
+        if task_id.is_empty()
+            || !task_id
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+        {
+            return Err("Invalid task id for worktree creation".to_string());
+        }
+
+        let repo_path = Self::resolve_git_workspace(Path::new(repo_path)).await?;
+        let branch_name = format!("my-workbench/wt-{}", task_id);
+        let worktree_parent = prepare_worktree_parent(&repo_path).await?;
+        let worktree_full_path = worktree_parent.join(format!("wt-{task_id}"));
+        match tokio::fs::symlink_metadata(&worktree_full_path).await {
+            Ok(_) => return Err("Worktree target path already exists".to_string()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(format!("Failed to inspect worktree target: {error}")),
+        }
+
+        let output = Command::new("git")
+            .current_dir(&repo_path)
+            .arg("worktree")
+            .arg("add")
+            .arg("-b")
+            .arg(&branch_name)
+            .arg(&worktree_full_path)
+            .output()
+            .await
+            .map_err(|error| format!("Failed to run git worktree add: {}", error))?;
+
+        if output.status.success() {
+            let canonical_worktree = tokio::fs::canonicalize(&worktree_full_path)
+                .await
+                .map_err(|error| format!("Invalid created worktree path: {error}"))?;
+            if !canonical_worktree.starts_with(&worktree_parent) {
+                return Err("Created worktree escaped its repository directory".to_string());
+            }
+            return Ok((
+                canonical_worktree.to_string_lossy().to_string(),
+                branch_name,
+            ));
+        }
+
+        let error = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        Err(if error.is_empty() {
+            "git worktree add failed".to_string()
+        } else {
+            error
+        })
     }
 
     pub async fn get_changed_files(worktree_path: &str) -> Result<Vec<ChangedFile>, String> {
-        let output = Command::new("git")
-            .current_dir(worktree_path)
-            .args(["status", "--porcelain=v1", "-z", "--untracked-files=all"])
-            .output()
-            .await
-            .map_err(|e| format!("Failed to run git status: {}", e))?;
+        let worktree_path = Self::resolve_git_workspace(Path::new(worktree_path)).await?;
+        let mut command = Command::new("git");
+        command.current_dir(&worktree_path).args([
+            "status",
+            "--porcelain=v1",
+            "-z",
+            "--untracked-files=all",
+        ]);
+        let output = match run_bounded_command(command, "git status").await? {
+            BoundedCommandOutput::Complete(output) => output,
+            BoundedCommandOutput::TooLarge => return Err(LARGE_CHANGED_FILES_ERROR.to_string()),
+        };
 
         if !output.status.success() {
             let error = String::from_utf8_lossy(&output.stderr).trim().to_string();
-            if is_non_git_error(&error) {
-                return scan_fallback_files(worktree_path).await;
-            }
             return Err(if error.is_empty() {
                 "git status failed".to_string()
             } else {
@@ -108,15 +166,12 @@ impl GitService {
     }
 
     pub async fn get_diff(worktree_path: &str, file_path: &str) -> Result<String, String> {
-        let _ = validate_diff_path(worktree_path, file_path).await?;
-        // Revalidate immediately before invoking Git as well as before the fallback read.
-        let _ = validate_diff_path(worktree_path, file_path).await?;
-        let output = Command::new("git")
-            .current_dir(worktree_path)
-            .args(["diff", "HEAD", "--", file_path])
-            .output()
-            .await
-            .map_err(|e| format!("Failed to run git diff: {}", e))?;
+        let worktree_path = Self::resolve_git_workspace(Path::new(worktree_path)).await?;
+        let relative_path = validate_relative_file_path(file_path)?;
+        let output = match run_git_diff(&worktree_path, &relative_path, false).await? {
+            BoundedCommandOutput::Complete(output) => output,
+            BoundedCommandOutput::TooLarge => return Ok(LARGE_DIFF_FALLBACK.to_string()),
+        };
 
         if output.status.success() && !output.stdout.is_empty() {
             return Ok(format_diff_output(&output.stdout));
@@ -124,27 +179,64 @@ impl GitService {
 
         if !output.status.success() {
             let error = String::from_utf8_lossy(&output.stderr).trim().to_string();
-            if !is_non_git_error(&error) && !is_unborn_repository_error(&error) {
+            if !is_unborn_repository_error(&error) {
                 return Err(if error.is_empty() {
                     "git diff failed".to_string()
                 } else {
                     error
                 });
             }
-        } else if is_tracked_file(worktree_path, file_path).await {
+
+            let staged_output = match run_git_diff(&worktree_path, &relative_path, true).await? {
+                BoundedCommandOutput::Complete(output) => output,
+                BoundedCommandOutput::TooLarge => return Ok(LARGE_DIFF_FALLBACK.to_string()),
+            };
+            if !staged_output.status.success() {
+                let error = String::from_utf8_lossy(&staged_output.stderr)
+                    .trim()
+                    .to_string();
+                return Err(if error.is_empty() {
+                    "git diff --cached failed".to_string()
+                } else {
+                    error
+                });
+            }
+            if !staged_output.stdout.is_empty() {
+                return Ok(format_diff_output(&staged_output.stdout));
+            }
+        } else if is_tracked_file(&worktree_path, &relative_path).await {
             // A tracked file with no diff should not be presented as an untracked preview.
             return Ok(String::new());
         }
 
-        // Untracked files and plain-directory preview workspaces do not appear in `git diff
-        // HEAD`. Revalidate immediately before reading so a symlink/file swap cannot redirect
-        // the fallback read outside the selected worktree.
-        let safe_path = validate_diff_path(worktree_path, file_path).await?;
-        match tokio::fs::read(safe_path).await {
-            Ok(content) if content.is_empty() => Ok(format!("+++ {}\n", file_path)),
-            Ok(content) => Ok(format_untracked_preview(file_path, &content)),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
-            Err(error) => Err(format!("Failed to read file diff: {}", error)),
+        // Only a non-ignored untracked file reported by Git may use the raw-text preview. This
+        // prevents direct IPC requests from reading arbitrary files such as `.git/config` or an
+        // ignored `.env` inside an otherwise allowed repository.
+        if !is_untracked_file(&worktree_path, &relative_path).await {
+            return Ok(String::new());
+        }
+
+        let Some(safe_path) = resolve_existing_diff_file(&worktree_path, &relative_path).await?
+        else {
+            return Ok(String::new());
+        };
+        let file = match tokio::fs::File::open(safe_path).await {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(String::new()),
+            Err(error) => return Err(format!("Failed to read file diff: {}", error)),
+        };
+        let mut content = Vec::with_capacity(MAX_DIFF_PREVIEW_BYTES.min(8192));
+        file.take((MAX_DIFF_PREVIEW_BYTES + 1) as u64)
+            .read_to_end(&mut content)
+            .await
+            .map_err(|error| format!("Failed to read file diff: {error}"))?;
+        if content.len() > MAX_DIFF_PREVIEW_BYTES {
+            return Ok(LARGE_DIFF_FALLBACK.to_string());
+        }
+        if content.is_empty() {
+            Ok(format!("+++ {}\n", file_path))
+        } else {
+            Ok(format_untracked_preview(file_path, &content))
         }
     }
 }
@@ -333,10 +425,6 @@ fn is_binary_content(bytes: &[u8]) -> bool {
     std::str::from_utf8(bytes).is_err() || bytes.contains(&0)
 }
 
-fn is_non_git_error(error: &str) -> bool {
-    error.to_ascii_lowercase().contains("not a git repository")
-}
-
 fn is_unborn_repository_error(error: &str) -> bool {
     let lower = error.to_ascii_lowercase();
     (lower.contains("unknown revision") && lower.contains("head"))
@@ -345,80 +433,199 @@ fn is_unborn_repository_error(error: &str) -> bool {
         || lower.contains("does not have any commits yet")
 }
 
-async fn is_tracked_file(worktree_path: &str, file_path: &str) -> bool {
+async fn is_tracked_file(worktree_path: &Path, file_path: &Path) -> bool {
     Command::new("git")
         .current_dir(worktree_path)
-        .args(["ls-files", "--error-unmatch", "--", file_path])
+        .arg("--literal-pathspecs")
+        .arg("ls-files")
+        .arg("--error-unmatch")
+        .arg("--")
+        .arg(file_path)
         .output()
         .await
         .map(|output| output.status.success())
         .unwrap_or(false)
 }
 
-async fn scan_fallback_files(worktree_path: &str) -> Result<Vec<ChangedFile>, String> {
-    let root = tokio::fs::canonicalize(worktree_path)
-        .await
-        .map_err(|error| format!("Invalid fallback workspace: {}", error))?;
-    let mut directories = vec![root.clone()];
-    let mut changed_files = Vec::new();
+async fn run_git_diff(
+    worktree_path: &Path,
+    file_path: &Path,
+    cached: bool,
+) -> Result<BoundedCommandOutput, String> {
+    let mut command = Command::new("git");
+    command
+        .current_dir(worktree_path)
+        .arg("--literal-pathspecs")
+        .arg("diff")
+        .arg("--no-ext-diff")
+        .arg("--no-textconv");
+    if cached {
+        command.arg("--cached");
+    } else {
+        command.arg("HEAD");
+    }
+    command.arg("--").arg(file_path);
+    run_bounded_command(command, "git diff").await
+}
 
-    while let Some(directory) = directories.pop() {
-        let mut entries = tokio::fs::read_dir(&directory)
-            .await
-            .map_err(|error| format!("Failed to scan fallback workspace: {}", error))?;
-        while let Some(entry) = entries
-            .next_entry()
-            .await
-            .map_err(|error| format!("Failed to scan fallback workspace: {}", error))?
-        {
-            let file_type = entry
-                .file_type()
-                .await
-                .map_err(|error| format!("Failed to inspect fallback file: {}", error))?;
-            let path = entry.path();
-            if file_type.is_dir() {
-                if entry.file_name() != ".git" {
-                    directories.push(path);
+async fn run_bounded_command(
+    mut command: Command,
+    operation: &str,
+) -> Result<BoundedCommandOutput, String> {
+    command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+
+    let mut child = command
+        .spawn()
+        .map_err(|error| format!("Failed to run {operation}: {error}"))?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| format!("Failed to capture {operation} stdout"))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| format!("Failed to capture {operation} stderr"))?;
+    let (limit_tx, mut limit_rx) = mpsc::unbounded_channel();
+    let stdout_task = tokio::spawn(read_bounded_output(
+        stdout,
+        GitOutputStream::Stdout,
+        limit_tx.clone(),
+    ));
+    let stderr_task = tokio::spawn(read_bounded_output(
+        stderr,
+        GitOutputStream::Stderr,
+        limit_tx,
+    ));
+
+    let mut stop_error = None;
+    let status = tokio::select! {
+        status = child.wait() => status,
+        limit = limit_rx.recv() => {
+            if limit.is_some() {
+                match child.start_kill() {
+                    Ok(()) => {}
+                    Err(error) if matches!(
+                        error.kind(),
+                        std::io::ErrorKind::InvalidInput | std::io::ErrorKind::NotFound
+                    ) => {}
+                    Err(error) => {
+                        stop_error = Some(format!("Failed to stop oversized {operation}: {error}"));
+                    }
                 }
-                continue;
             }
-            if !file_type.is_file() {
-                continue;
-            }
+            child.wait().await
+        }
+    }
+    .map_err(|error| format!("Failed to wait for {operation}: {error}"))?;
 
-            let relative = path
-                .strip_prefix(&root)
-                .map_err(|error| format!("Failed to relativize fallback file: {}", error))?;
-            changed_files.push(ChangedFile {
-                path: relative
-                    .to_string_lossy()
-                    .replace(std::path::MAIN_SEPARATOR, "/"),
-                status: ChangedFileStatus::Untracked,
-            });
+    let stdout = stdout_task
+        .await
+        .map_err(|error| format!("Failed to join {operation} stdout reader: {error}"))?
+        .map_err(|error| format!("Failed to read {operation} stdout: {error}"))?;
+    let stderr = stderr_task
+        .await
+        .map_err(|error| format!("Failed to join {operation} stderr reader: {error}"))?
+        .map_err(|error| format!("Failed to read {operation} stderr: {error}"))?;
+
+    if stdout.exceeded {
+        return Ok(BoundedCommandOutput::TooLarge);
+    }
+    if stderr.exceeded {
+        return Err(format!(
+            "{operation} 오류 출력이 1 MiB 제한을 초과했습니다."
+        ));
+    }
+    if let Some(error) = stop_error {
+        return Err(error);
+    }
+
+    Ok(BoundedCommandOutput::Complete(Output {
+        status,
+        stdout: stdout.bytes,
+        stderr: stderr.bytes,
+    }))
+}
+
+async fn read_bounded_output<R: AsyncRead + Unpin>(
+    mut reader: R,
+    stream: GitOutputStream,
+    limit_tx: mpsc::UnboundedSender<GitOutputStream>,
+) -> Result<BoundedOutput, std::io::Error> {
+    let mut bytes = Vec::with_capacity(MAX_DIFF_PREVIEW_BYTES.min(8192));
+    let mut buffer = [0_u8; 8192];
+    let mut exceeded = false;
+
+    loop {
+        let read = reader.read(&mut buffer).await?;
+        if read == 0 {
+            break;
+        }
+        if exceeded {
+            continue;
+        }
+
+        let remaining = (MAX_DIFF_PREVIEW_BYTES + 1).saturating_sub(bytes.len());
+        bytes.extend_from_slice(&buffer[..read.min(remaining)]);
+        if bytes.len() > MAX_DIFF_PREVIEW_BYTES {
+            exceeded = true;
+            let _ = limit_tx.send(stream);
         }
     }
 
-    changed_files.sort_by(|left, right| left.path.cmp(&right.path));
-    Ok(changed_files)
+    Ok(BoundedOutput { bytes, exceeded })
 }
 
-async fn validate_diff_path(worktree_path: &str, file_path: &str) -> Result<PathBuf, String> {
-    let relative = Path::new(file_path);
-    if relative.is_absolute()
-        || relative.components().any(|component| {
-            matches!(
-                component,
-                Component::ParentDir | Component::RootDir | Component::Prefix(_)
-            )
-        })
-    {
-        return Err("Diff path must stay inside the selected worktree".to_string());
+async fn is_untracked_file(worktree_path: &Path, file_path: &Path) -> bool {
+    Command::new("git")
+        .current_dir(worktree_path)
+        .arg("--literal-pathspecs")
+        .arg("ls-files")
+        .arg("--others")
+        .arg("--exclude-standard")
+        .arg("-z")
+        .arg("--")
+        .arg(file_path)
+        .output()
+        .await
+        .map(|output| output.status.success() && !output.stdout.is_empty())
+        .unwrap_or(false)
+}
+
+async fn prepare_worktree_parent(repo_path: &Path) -> Result<PathBuf, String> {
+    let parent = repo_path.join(".my-workbench-worktrees");
+    match tokio::fs::symlink_metadata(&parent).await {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            return Err("Worktree parent directory must not be a symlink".to_string());
+        }
+        Ok(metadata) if !metadata.is_dir() => {
+            return Err("Worktree parent path must be a directory".to_string());
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            tokio::fs::create_dir(&parent)
+                .await
+                .map_err(|error| format!("Failed to create worktree parent dir: {error}"))?;
+        }
+        Err(error) => return Err(format!("Failed to inspect worktree parent dir: {error}")),
     }
 
-    let root = tokio::fs::canonicalize(worktree_path)
+    let canonical = tokio::fs::canonicalize(&parent)
         .await
-        .map_err(|e| format!("Invalid worktree path: {}", e))?;
-    let candidate = root.join(relative);
+        .map_err(|error| format!("Invalid worktree parent dir: {error}"))?;
+    if !canonical.starts_with(repo_path) {
+        return Err("Worktree parent directory escaped its repository".to_string());
+    }
+    Ok(canonical)
+}
+
+async fn resolve_existing_diff_file(
+    worktree_path: &Path,
+    relative: &Path,
+) -> Result<Option<PathBuf>, String> {
+    let candidate = worktree_path.join(relative);
 
     match tokio::fs::symlink_metadata(&candidate).await {
         Ok(metadata) if metadata.file_type().is_symlink() => {
@@ -429,12 +636,12 @@ async fn validate_diff_path(worktree_path: &str, file_path: &str) -> Result<Path
             let canonical = tokio::fs::canonicalize(&candidate)
                 .await
                 .map_err(|e| format!("Invalid diff path: {}", e))?;
-            if !canonical.starts_with(&root) {
+            if !canonical.starts_with(worktree_path) {
                 return Err("Diff path must stay inside the selected worktree".to_string());
             }
-            Ok(canonical)
+            Ok(Some(canonical))
         }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(candidate),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(error) => Err(format!("Invalid diff path: {}", error)),
     }
 }
@@ -521,17 +728,30 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_create_worktree_falls_back_only_for_non_git_directories() {
+    async fn test_non_git_workspaces_are_rejected_without_fallback_reads_or_scans() {
         let root = unique_test_path("non-git");
         tokio::fs::create_dir_all(&root).await.unwrap();
+        tokio::fs::write(root.join("secret.txt"), b"must-not-be-returned")
+            .await
+            .unwrap();
 
-        let (worktree_path, branch_name) =
-            GitService::create_worktree(root.to_str().unwrap(), "preview")
-                .await
-                .unwrap();
+        let create_error = GitService::create_worktree(root.to_str().unwrap(), "preview")
+            .await
+            .unwrap_err();
+        let changed_error = GitService::get_changed_files(root.to_str().unwrap())
+            .await
+            .unwrap_err();
+        let diff_error = GitService::get_diff(root.to_str().unwrap(), "secret.txt")
+            .await
+            .unwrap_err();
 
-        assert_eq!(branch_name, "my-workbench/wt-preview");
-        assert!(Path::new(&worktree_path).is_dir());
+        assert!(create_error.to_ascii_lowercase().contains("git repository"));
+        assert!(changed_error
+            .to_ascii_lowercase()
+            .contains("git repository"));
+        assert!(diff_error.to_ascii_lowercase().contains("git repository"));
+        assert!(!diff_error.contains("must-not-be-returned"));
+        assert!(!root.join(".my-workbench-worktrees").exists());
         tokio::fs::remove_dir_all(root).await.unwrap();
     }
 
@@ -544,8 +764,248 @@ mod tests {
             .await
             .unwrap_err();
 
-        assert!(error.contains("Repository path must be a directory"));
+        assert!(error.contains("Git workspace path must be a directory"));
         tokio::fs::remove_file(path).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_untracked_text_preview_is_kept_for_git_workspaces() {
+        let root = unique_test_path("untracked");
+        init_git_repo(&root).await;
+        tokio::fs::write(root.join("notes.txt"), b"hello from git workspace\n")
+            .await
+            .unwrap();
+
+        let diff = GitService::get_diff(root.to_str().unwrap(), "notes.txt")
+            .await
+            .unwrap();
+
+        assert_eq!(diff, "+++ notes.txt\nhello from git workspace\n");
+        tokio::fs::remove_dir_all(root).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_staged_file_diff_is_kept_for_unborn_git_workspaces() {
+        let root = unique_test_path("unborn-staged");
+        init_git_repo(&root).await;
+        tokio::fs::write(root.join("staged.txt"), b"first staged content\n")
+            .await
+            .unwrap();
+        let add = Command::new("git")
+            .current_dir(&root)
+            .args(["add", "--", "staged.txt"])
+            .output()
+            .await
+            .unwrap();
+        assert!(add.status.success());
+
+        let diff = GitService::get_diff(root.to_str().unwrap(), "staged.txt")
+            .await
+            .unwrap();
+
+        assert!(diff.contains("first staged content"));
+        assert!(diff.contains("new file mode"));
+        tokio::fs::remove_dir_all(root).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_untracked_preview_stops_at_the_size_limit() {
+        let root = unique_test_path("large-untracked");
+        init_git_repo(&root).await;
+        tokio::fs::write(
+            root.join("large.txt"),
+            vec![b'a'; MAX_DIFF_PREVIEW_BYTES + 1],
+        )
+        .await
+        .unwrap();
+
+        let diff = GitService::get_diff(root.to_str().unwrap(), "large.txt")
+            .await
+            .unwrap();
+
+        assert_eq!(diff, LARGE_DIFF_FALLBACK);
+        tokio::fs::remove_dir_all(root).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_changed_file_list_stops_at_the_size_limit() {
+        use std::fmt::Write as _;
+        use tokio::io::AsyncWriteExt as _;
+
+        let root = unique_test_path("large-status");
+        init_git_repo(&root).await;
+        let hash_output = Command::new("git")
+            .current_dir(&root)
+            .args(["hash-object", "-w", "--stdin"])
+            .output()
+            .await
+            .unwrap();
+        assert!(hash_output.status.success());
+        let hash = String::from_utf8(hash_output.stdout)
+            .unwrap()
+            .trim()
+            .to_string();
+        let suffix = "x".repeat(220);
+        let mut index_input = String::new();
+        for index in 0..5000 {
+            writeln!(index_input, "100644 {hash}\t{index:05}-{suffix}.txt").unwrap();
+        }
+
+        let mut update_index = Command::new("git");
+        update_index
+            .current_dir(&root)
+            .args(["update-index", "--index-info"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped());
+        let mut update_index = update_index.spawn().unwrap();
+        let mut stdin = update_index.stdin.take().unwrap();
+        stdin.write_all(index_input.as_bytes()).await.unwrap();
+        drop(stdin);
+        let update_output = update_index.wait_with_output().await.unwrap();
+        assert!(
+            update_output.status.success(),
+            "git update-index failed: {}",
+            String::from_utf8_lossy(&update_output.stderr)
+        );
+
+        let error = GitService::get_changed_files(root.to_str().unwrap())
+            .await
+            .unwrap_err();
+
+        assert_eq!(error, LARGE_CHANGED_FILES_ERROR);
+        tokio::fs::remove_dir_all(root).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_tracked_diff_stops_at_the_size_limit() {
+        let root = unique_test_path("large-tracked");
+        init_git_repo(&root).await;
+        let file_path = root.join("large.txt");
+        tokio::fs::write(
+            &file_path,
+            "before\n".repeat(MAX_DIFF_PREVIEW_BYTES / 7 + 1),
+        )
+        .await
+        .unwrap();
+        let add = Command::new("git")
+            .current_dir(&root)
+            .args(["add", "--", "large.txt"])
+            .output()
+            .await
+            .unwrap();
+        assert!(add.status.success());
+        let commit = Command::new("git")
+            .current_dir(&root)
+            .args([
+                "-c",
+                "user.name=My Workbench Test",
+                "-c",
+                "user.email=test@example.invalid",
+                "commit",
+                "--quiet",
+                "-m",
+                "initial",
+            ])
+            .output()
+            .await
+            .unwrap();
+        assert!(
+            commit.status.success(),
+            "git commit failed: {}",
+            String::from_utf8_lossy(&commit.stderr)
+        );
+        tokio::fs::write(&file_path, "after\n".repeat(MAX_DIFF_PREVIEW_BYTES / 6 + 1))
+            .await
+            .unwrap();
+
+        let diff = GitService::get_diff(root.to_str().unwrap(), "large.txt")
+            .await
+            .unwrap();
+
+        assert_eq!(diff, LARGE_DIFF_FALLBACK);
+        tokio::fs::remove_dir_all(root).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_diff_does_not_read_git_metadata_or_ignored_files() {
+        let root = unique_test_path("protected-diff-files");
+        init_git_repo(&root).await;
+        tokio::fs::write(root.join(".gitignore"), b".env\n")
+            .await
+            .unwrap();
+        tokio::fs::write(root.join(".env"), b"SECRET=must-not-be-returned\n")
+            .await
+            .unwrap();
+
+        let git_config = GitService::get_diff(root.to_str().unwrap(), ".git/config")
+            .await
+            .unwrap();
+        let ignored_env = GitService::get_diff(root.to_str().unwrap(), ".env")
+            .await
+            .unwrap();
+
+        assert!(git_config.is_empty());
+        assert!(ignored_env.is_empty());
+        assert!(!git_config.contains("repositoryformatversion"));
+        assert!(!ignored_env.contains("must-not-be-returned"));
+        tokio::fs::remove_dir_all(root).await.unwrap();
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn test_create_worktree_rejects_a_symlinked_parent() {
+        use std::os::unix::fs::symlink;
+
+        let container = unique_test_path("worktree-parent-symlink");
+        let root = container.join("repo");
+        let outside = container.join("outside");
+        init_git_repo(&root).await;
+        tokio::fs::create_dir_all(&outside).await.unwrap();
+        symlink(&outside, root.join(".my-workbench-worktrees")).unwrap();
+
+        let error = GitService::create_worktree(root.to_str().unwrap(), "safe-task")
+            .await
+            .unwrap_err();
+
+        assert!(error.contains("must not be a symlink"));
+        assert!(tokio::fs::read_dir(&outside)
+            .await
+            .unwrap()
+            .next_entry()
+            .await
+            .unwrap()
+            .is_none());
+        tokio::fs::remove_dir_all(container).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_diff_rejects_parent_traversal_in_a_git_workspace() {
+        let root = unique_test_path("diff-traversal");
+        init_git_repo(&root).await;
+
+        let error = GitService::get_diff(root.to_str().unwrap(), "../secret.txt")
+            .await
+            .unwrap_err();
+
+        assert!(error.contains("상대 경로"));
+        tokio::fs::remove_dir_all(root).await.unwrap();
+    }
+
+    async fn init_git_repo(path: &Path) {
+        tokio::fs::create_dir_all(path).await.unwrap();
+        let output = Command::new("git")
+            .arg("init")
+            .arg("--quiet")
+            .arg(path)
+            .output()
+            .await
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "git init failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 
     fn unique_test_path(label: &str) -> std::path::PathBuf {

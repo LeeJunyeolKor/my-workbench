@@ -54,6 +54,8 @@ impl AgentService {
         agent_type: String,
         execution_mode: Option<String>,
     ) -> Result<Task, String> {
+        validate_agent_type(&agent_type)?;
+        let use_existing_workspace = resolve_execution_mode(execution_mode.as_deref())?;
         let mut task = Task::new(workspace_path.clone(), prompt.clone(), agent_type.clone());
         let task_id = task.id.clone();
         let task_id_str = task.id.0.clone();
@@ -61,7 +63,6 @@ impl AgentService {
         task.transition_to(TaskStatus::Preparing)?;
         insert_task(state, &task);
 
-        let use_existing_workspace = execution_mode.as_deref() == Some("existing-worktree");
         let (worktree_path, branch_name) = if use_existing_workspace {
             let metadata = tokio::fs::metadata(&workspace_path)
                 .await
@@ -310,6 +311,21 @@ impl AgentService {
     }
 }
 
+fn validate_agent_type(agent_type: &str) -> Result<(), String> {
+    match agent_type {
+        "codex" | "claude" => Ok(()),
+        _ => Err(format!("Unsupported agent type: {}", agent_type)),
+    }
+}
+
+fn resolve_execution_mode(execution_mode: Option<&str>) -> Result<bool, String> {
+    match execution_mode.unwrap_or("new-worktree") {
+        "new-worktree" => Ok(false),
+        "existing-worktree" => Ok(true),
+        mode => Err(format!("Unsupported execution mode: {}", mode)),
+    }
+}
+
 fn insert_task(state: &AgentServiceState, task: &Task) {
     let mut tasks = state.tasks.lock().unwrap();
     tasks.insert(task.id.0.clone(), task.clone());
@@ -465,6 +481,27 @@ fn fail_task_in_map(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn validates_agent_type_before_execution() {
+        assert!(validate_agent_type("codex").is_ok());
+        assert!(validate_agent_type("claude").is_ok());
+        assert_eq!(
+            validate_agent_type("mock"),
+            Err("Unsupported agent type: mock".to_string())
+        );
+    }
+
+    #[test]
+    fn resolves_only_supported_execution_modes() {
+        assert_eq!(resolve_execution_mode(None), Ok(false));
+        assert_eq!(resolve_execution_mode(Some("new-worktree")), Ok(false));
+        assert_eq!(resolve_execution_mode(Some("existing-worktree")), Ok(true));
+        assert_eq!(
+            resolve_execution_mode(Some("preview")),
+            Err("Unsupported execution mode: preview".to_string())
+        );
+    }
 
     #[test]
     fn test_task_failed_and_cancelled_lifecycle() {

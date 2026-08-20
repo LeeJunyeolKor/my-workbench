@@ -17,7 +17,8 @@
     "lint": "biome lint",
     "check": "biome check",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "verify:tauri-frontend": "node scripts/verify-tauri-frontend.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
