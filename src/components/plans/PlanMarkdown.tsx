@@ -9,7 +9,6 @@ type PlanMarkdownProps = {
 	html: string;
 	raw: string;
 	currentFile?: string;
-	onSelection?: (selectedText: string, rect: DOMRect) => void;
 };
 
 function resolveRelativePath(currentFile: string, href: string): string {
@@ -67,10 +66,8 @@ export const PlanMarkdown = memo(function PlanMarkdown({
 	html,
 	raw,
 	currentFile = "plan.md",
-	onSelection,
 }: PlanMarkdownProps) {
 	const [showRaw, setShowRaw] = useState(false);
-	const containerRef = useRef<HTMLDivElement>(null);
 	const contentRef = useRef<HTMLDivElement>(null);
 	const navigate = useNavigate({ from: "/plans/$taskId" });
 
@@ -174,22 +171,8 @@ export const PlanMarkdown = memo(function PlanMarkdown({
 		};
 	}, [currentFile, navigate, showRaw]);
 
-	const handlePointerUp = () => {
-		if (!onSelection) return;
-		const selection = window.getSelection();
-		if (!selection || selection.isCollapsed) return;
-		const selectedText = selection.toString().trim();
-		if (!selectedText) return;
-
-		if (containerRef.current?.contains(selection.anchorNode)) {
-			const range = selection.getRangeAt(0);
-			const rect = range.getBoundingClientRect();
-			onSelection(selectedText, rect);
-		}
-	};
-
 	return (
-		<div ref={containerRef} onPointerUp={handlePointerUp}>
+		<div>
 			<fieldset className="mb-4 flex gap-2 border-0 p-0">
 				<legend className="sr-only">문서 보기 모드</legend>
 				<button

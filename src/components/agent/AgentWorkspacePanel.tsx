@@ -20,8 +20,10 @@ import {
 	type ChangeStatus,
 	cancelAgentTask,
 	createTaskViewState,
+	DESKTOP_RUNTIME_REQUIRED_MESSAGE,
 	getChangedFiles,
 	getDiff,
+	hasTauriRuntime,
 	isTerminalTaskState,
 	listenAgentEvents,
 	normalizeTaskId,
@@ -106,10 +108,6 @@ function taskStatusLabel(status: TaskState | null): string {
 	}
 }
 
-function hasTauriRuntime() {
-	return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-}
-
 function appendSystemLog(state: TaskViewState, text: string): TaskViewState {
 	return {
 		...state,
@@ -157,11 +155,11 @@ export function AgentWorkspacePanel({
 	const [loadingDiff, setLoadingDiff] = useState(false);
 	const [panelError, setPanelError] = useState<string | null>(null);
 	const [isStarting, setIsStarting] = useState(false);
-	const eventsReadyRef = useRef(!hasTauriRuntime());
+	const [tauriRuntime, setTauriRuntime] = useState(false);
+	const eventsReadyRef = useRef(false);
 	const [eventsReady, setEventsReady] = useState(eventsReadyRef.current);
 	const terminalEndRef = useRef<HTMLDivElement>(null);
 	const refreshKeyRef = useRef<string | null>(null);
-	const previewTimersRef = useRef<number[]>([]);
 	const generationRef = useRef(0);
 	const filesRequestRef = useRef(0);
 	const selectionRequestRef = useRef(0);
@@ -186,6 +184,10 @@ export function AgentWorkspacePanel({
 
 	taskIdRef.current = taskId;
 	executingRef.current = isExecuting;
+
+	useEffect(() => {
+		setTauriRuntime(hasTauriRuntime());
+	}, []);
 
 	const handleSelectFile = useCallback(
 		async (
@@ -318,10 +320,6 @@ export function AgentWorkspacePanel({
 		startRequestRef.current += 1;
 		pendingStartEventsRef.current = null;
 		setIsStarting(false);
-		for (const timer of previewTimersRef.current) {
-			window.clearTimeout(timer);
-		}
-		previewTimersRef.current = [];
 		void requestCancellation().catch(() => undefined);
 
 		setWorkspacePath(initialWorkspacePath);
@@ -341,9 +339,8 @@ export function AgentWorkspacePanel({
 	useEffect(() => {
 		let disposed = false;
 		let unlisten: (() => void) | null = null;
-		const tauriRuntime = hasTauriRuntime();
-		eventsReadyRef.current = !tauriRuntime;
-		setEventsReady(!tauriRuntime);
+		eventsReadyRef.current = false;
+		setEventsReady(false);
 
 		if (!tauriRuntime) {
 			return () => {
@@ -394,7 +391,7 @@ export function AgentWorkspacePanel({
 			eventsReadyRef.current = false;
 			unlisten?.();
 		};
-	}, []);
+	}, [tauriRuntime]);
 
 	useEffect(() => {
 		if (latestLogId) {
@@ -419,9 +416,6 @@ export function AgentWorkspacePanel({
 			selectionRequestRef.current += 1;
 			startRequestRef.current += 1;
 			pendingStartEventsRef.current = null;
-			for (const timer of previewTimersRef.current) {
-				window.clearTimeout(timer);
-			}
 			void requestCancellation().catch(() => undefined);
 		};
 	}, [requestCancellation]);
@@ -464,10 +458,6 @@ export function AgentWorkspacePanel({
 			startRequestRef.current += 1;
 			pendingStartEventsRef.current = null;
 			setIsStarting(false);
-			for (const timer of previewTimersRef.current) {
-				window.clearTimeout(timer);
-			}
-			previewTimersRef.current = [];
 			await requestCancellation();
 			setWorkspacePath(workspace.path);
 			onWorkspacePathChange?.(workspace.path);
@@ -485,7 +475,11 @@ export function AgentWorkspacePanel({
 
 	async function handleStartTask() {
 		if (isStarting || disposedRef.current) return;
-		if (hasTauriRuntime() && !eventsReadyRef.current) {
+		if (!tauriRuntime) {
+			setPanelError(DESKTOP_RUNTIME_REQUIRED_MESSAGE);
+			return;
+		}
+		if (!eventsReadyRef.current) {
 			setPanelError("에이전트 이벤트 구독을 준비하는 중입니다.");
 			return;
 		}
@@ -521,10 +515,6 @@ export function AgentWorkspacePanel({
 		startRequestRef.current = startRequest;
 		pendingStartEventsRef.current = { request: startRequest, events: [] };
 		setIsStarting(true);
-		for (const timer of previewTimersRef.current) {
-			window.clearTimeout(timer);
-		}
-		previewTimersRef.current = [];
 
 		setPanelError(null);
 		setSelectedFile(null);
@@ -600,44 +590,6 @@ export function AgentWorkspacePanel({
 				}
 				return nextState;
 			});
-
-			if (!hasTauriRuntime()) {
-				const previewEvent = (event: AgentEvent) => {
-					setViewState((state) => projectTaskState(state, event));
-				};
-				previewTimersRef.current.push(
-					window.setTimeout(() => {
-						previewEvent({
-							type: "Output",
-							payload: {
-								task_id: task.id,
-								stream: "Stdout",
-								content: `[Agent] Initializing worktree at ${task.worktree_path}`,
-							},
-						});
-					}, 300),
-				);
-				previewTimersRef.current.push(
-					window.setTimeout(() => {
-						previewEvent({
-							type: "FileChanged",
-							payload: {
-								task_id: task.id,
-								path: "src/lib/tauri-ipc.ts",
-								status: "modified",
-							},
-						});
-					}, 800),
-				);
-				previewTimersRef.current.push(
-					window.setTimeout(() => {
-						previewEvent({
-							type: "TaskCompleted",
-							payload: { task_id: task.id },
-						});
-					}, 1300),
-				);
-			}
 		} catch (error) {
 			if (pendingStartEventsRef.current?.request === startRequest) {
 				pendingStartEventsRef.current = null;
@@ -665,22 +617,6 @@ export function AgentWorkspacePanel({
 
 	async function handleCancelTask() {
 		if (!taskId) return;
-		if (!hasTauriRuntime()) {
-			generationRef.current += 1;
-			filesRequestRef.current += 1;
-			selectionRequestRef.current += 1;
-			for (const timer of previewTimersRef.current) {
-				window.clearTimeout(timer);
-			}
-			previewTimersRef.current = [];
-			setViewState((state) =>
-				projectTaskState(state, {
-					type: "TaskCancelled",
-					payload: { task_id: taskId },
-				}),
-			);
-			return;
-		}
 		try {
 			await requestCancellation();
 			setViewState((state) => appendSystemLog(state, "Cancellation requested"));
@@ -725,6 +661,13 @@ export function AgentWorkspacePanel({
 				</InlineNotice>
 			) : null}
 
+			{!tauriRuntime ? (
+				<InlineNotice tone="warning" title="데스크톱 앱이 필요합니다">
+					브라우저에서는 실제 작업을 시작하지 않습니다. 에이전트 실행·취소와 Git
+					변경 조회는 My Workbench 데스크톱 앱을 사용해 주세요.
+				</InlineNotice>
+			) : null}
+
 			<div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(260px,0.8fr)_minmax(0,1.6fr)]">
 				<div className="space-y-5">
 					<div className={surfaceClassName("space-y-3 p-4")}>
@@ -744,13 +687,15 @@ export function AgentWorkspacePanel({
 								type="text"
 								value={workspacePath}
 								onChange={(event) => setWorkspacePath(event.target.value)}
+								disabled={!tauriRuntime}
 								placeholder="~/workspaces/repository"
 								className="min-w-0 flex-1 rounded-md border border-[#d0d7de] bg-white px-2.5 py-1.5 font-mono text-xs dark:border-[#30363d] dark:bg-[#0d1117] dark:text-[#c9d1d9]"
 							/>
 							<button
 								type="button"
 								onClick={handleSelectWorkspace}
-								className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700"
+								disabled={!tauriRuntime}
+								className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
 							>
 								Set
 							</button>
@@ -778,7 +723,7 @@ export function AgentWorkspacePanel({
 							id="agent-runner-type"
 							value={agentType}
 							onChange={(event) => setAgentType(event.target.value)}
-							disabled={taskBusy}
+							disabled={!tauriRuntime || taskBusy}
 							className="w-full rounded-md border border-[#d0d7de] bg-white px-2.5 py-1.5 font-mono text-xs dark:border-[#30363d] dark:bg-[#0d1117] dark:text-[#c9d1d9]"
 						>
 							<option value="mock">Mock test runner</option>
@@ -796,14 +741,14 @@ export function AgentWorkspacePanel({
 							rows={4}
 							value={prompt}
 							onChange={(event) => setPrompt(event.target.value)}
-							disabled={taskBusy}
+							disabled={!tauriRuntime || taskBusy}
 							className="w-full rounded-md border border-[#d0d7de] bg-white p-2.5 font-mono text-xs dark:border-[#30363d] dark:bg-[#0d1117] dark:text-[#c9d1d9]"
 						/>
 						<div className="flex gap-2">
 							<button
 								type="button"
 								onClick={handleStartTask}
-								disabled={taskBusy || (hasTauriRuntime() && !eventsReady)}
+								disabled={!tauriRuntime || taskBusy || !eventsReady}
 								className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-md bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
 							>
 								{taskBusy ? (

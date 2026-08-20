@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { Moon, Settings, Sun } from "lucide-react";
+import { Moon, Sun } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { getBrowserStorage, safeSetStorageItem } from "#/lib/browser-storage";
 import { cn } from "#/lib/cn";
@@ -9,7 +9,6 @@ import {
 	type ThemePreference,
 } from "#/lib/theme-preference";
 import { CommandPalette } from "./CommandPalette";
-import { SettingsModal } from "./SettingsModal";
 
 const nav = [
 	{ to: "/", label: "업무 콘솔", exact: true },
@@ -32,7 +31,6 @@ declare global {
 
 export function TopNav() {
 	const [theme, setTheme] = useState<ThemePreference>("dark");
-	const [settingsModalOpen, setSettingsModalOpen] = useState(false);
 	const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
 	const openCommandPalette = useCallback(() => setCommandPaletteOpen(true), []);
@@ -147,15 +145,6 @@ export function TopNav() {
 			<div className="flex shrink-0 items-center gap-1">
 				<button
 					type="button"
-					onClick={() => setSettingsModalOpen(true)}
-					className="cursor-pointer rounded-md p-1.5 text-[var(--workbench-nav-muted)] transition-colors hover:bg-[var(--workbench-nav-hover)] hover:text-zinc-800 dark:hover:text-white"
-					title="설정"
-					aria-label="설정 열기"
-				>
-					<Settings className="h-4 w-4" />
-				</button>
-				<button
-					type="button"
 					onClick={toggleTheme}
 					className="cursor-pointer rounded-md p-1.5 text-[var(--workbench-nav-muted)] transition-colors hover:bg-[var(--workbench-nav-hover)] hover:text-zinc-800 dark:hover:text-white"
 					title={theme === "light" ? "다크 모드 전환" : "라이트 모드 전환"}
@@ -171,10 +160,6 @@ export function TopNav() {
 				</button>
 			</div>
 
-			<SettingsModal
-				isOpen={settingsModalOpen}
-				onClose={() => setSettingsModalOpen(false)}
-			/>
 			<CommandPalette
 				isOpen={commandPaletteOpen}
 				onOpenChange={setCommandPaletteOpen}

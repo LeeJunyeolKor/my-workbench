@@ -27,16 +27,6 @@ vi.mock("@tanstack/react-router", () => ({
 	useNavigate: () => navigate,
 }));
 
-vi.mock("@tanstack/react-start", () => ({
-	useServerFn: () => vi.fn(),
-}));
-
-vi.mock("#/server/keychain", () => ({
-	checkApiKeyInKeychainFn: vi.fn(),
-	deleteApiKeyFromKeychainFn: vi.fn(),
-	saveApiKeyToKeychainFn: vi.fn(),
-}));
-
 vi.mock("#/server/search", () => ({
 	globalSearch: vi.fn(),
 }));
@@ -83,6 +73,12 @@ describe("TopNav", () => {
 			screen.getByRole("link", { name: "업무 콘솔" }).getAttribute("href"),
 		).toBe("/");
 		expect(screen.queryByRole("link", { name: "디자인 프리뷰" })).toBeNull();
+	});
+
+	it("does not expose the removed Plan AI settings", () => {
+		render(<TopNav />);
+
+		expect(screen.queryByRole("button", { name: "설정 열기" })).toBeNull();
 	});
 
 	it("opens the command palette from the shared custom event", () => {

@@ -9,7 +9,6 @@ import {
 	buildAgentSessionCommand,
 	parseAgentSessionContent,
 } from "#/lib/agent-sessions";
-import { WORKBENCH_DATA } from "#/server/paths";
 
 const MAX_FILES_PER_SOURCE = 300;
 const MAX_FILE_BYTES = 2_000_000;
@@ -158,25 +157,6 @@ async function parseSessionFiles(
 	return sessions;
 }
 
-async function readWorkbenchSession(match: AgentSessionMatchInput) {
-	const filePath = path.join(
-		WORKBENCH_DATA,
-		`chat_history_${match.taskKey}.json`,
-	);
-	const content = await readSmallFile(filePath);
-	if (!content) return [];
-	const stat = await fs.stat(filePath).catch(() => null);
-
-	const session = parseAgentSessionContent({
-		agentType: "my-workbench",
-		transcriptPath: filePath,
-		content,
-		match,
-		transcriptMtime: stat?.mtime.toISOString() ?? null,
-	});
-	return session ? [session] : [];
-}
-
 export async function findAgentSessionsForTask(
 	match: AgentSessionMatchInput,
 ): Promise<AgentSessionInfo[]> {
@@ -208,17 +188,16 @@ export async function findAgentSessionsForTask(
 		pickRecentSessionFilePaths(claudeFileCandidates),
 	]);
 
-	const [cursor, codex, claude, workbench] = await Promise.all([
+	const [cursor, codex, claude] = await Promise.all([
 		parseSessionFiles("cursor", cursorFiles, match),
 		parseSessionFiles("codex", codexFiles, match, (filePath) => {
 			const sessionId = extractSessionIdFromPath(filePath);
 			return sessionId ? (codexTitles.get(sessionId) ?? null) : null;
 		}),
 		parseSessionFiles("claude", claudeFiles, match),
-		readWorkbenchSession(match),
 	]);
 
-	return [...cursor, ...codex, ...claude, ...workbench]
+	return [...cursor, ...codex, ...claude]
 		.sort((a, b) => {
 			if (a.score !== b.score) return b.score - a.score;
 			return (b.lastActiveAt ?? "").localeCompare(a.lastActiveAt ?? "");
