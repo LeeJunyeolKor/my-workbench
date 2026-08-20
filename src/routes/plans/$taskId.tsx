@@ -33,7 +33,6 @@ import {
 	GitBranch,
 	ListFilter,
 	Loader2,
-	MessageSquare,
 	MessageSquareText,
 	Play,
 	Terminal,
@@ -41,30 +40,18 @@ import {
 import {
 	type CSSProperties,
 	type MouseEvent as ReactMouseEvent,
-	type ReactNode,
-	useCallback,
 	useEffect,
 	useState,
 } from "react";
 import { AppShell } from "#/components/layout/AppShell";
-import { ChatPanel } from "#/components/plans/ChatPanel";
 import { PlanMarkdown } from "#/components/plans/PlanMarkdown";
 import { PlanToc } from "#/components/plans/PlanToc";
-import { SelectionPopover } from "#/components/plans/SelectionPopover";
 import {
 	InlineNotice,
 	type InlineNoticeTone,
 } from "#/components/ui/InlineNotice";
 import { Pill } from "#/components/ui/Pill";
 import { surfaceClassName } from "#/components/ui/surfaceClassName";
-import { useIsMobile } from "#/hooks/useIsMobile";
-import {
-	type AgentType,
-	getAgentCliPath,
-	isAgentType,
-	persistAgentPreferences,
-	readAgentPreferences,
-} from "#/lib/agent-preferences";
 import { getBrowserStorage } from "#/lib/browser-storage";
 import {
 	planDocumentClassName,
@@ -72,20 +59,17 @@ import {
 } from "#/lib/design-system-classnames";
 import { getErrorMessage } from "#/lib/errors";
 import {
-	type ChatDock,
-	clampChatHeight,
-	clampChatWidth,
-	clampPlanSidebarWidth,
-	DEFAULT_PLAN_SIDEBAR_WIDTH,
-	persistPlanChatLayoutPreferences,
-	readPlanChatLayoutPreferences,
-} from "#/lib/plans/chat-layout-preferences";
-import {
 	filterVisiblePlanFiles,
 	getPlanFileTreeItemIds,
 	planFileTreeItemId,
 	reorderPlanFileTreeItemsByDrag,
 } from "#/lib/plans/order";
+import {
+	clampPlanSidebarWidth,
+	DEFAULT_PLAN_SIDEBAR_WIDTH,
+	persistPlanSidebarWidth,
+	readPlanSidebarWidth,
+} from "#/lib/plans/sidebar-preferences";
 import {
 	type PlanTreeExpandMode,
 	shouldExpandPlanFolder,
@@ -96,7 +80,6 @@ import {
 	getPlanSettings,
 	savePlanFileFn,
 	savePlanFileOrderFn,
-	sendChatMessageFn,
 } from "#/server/plans";
 import { openAgentSession, openInTool } from "#/server/worktrees";
 
@@ -378,9 +361,7 @@ function PlanDetailPage() {
 	const [isEditing, setIsEditing] = useState(false);
 	const [editContent, setEditContent] = useState("");
 	const [isSaving, setIsSaving] = useState(false);
-	const [aiMessage, setAiMessage] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
-	const [aiAgentType, setAiAgentType] = useState<AgentType>("gemini");
 	const [orderedFiles, setOrderedFiles] = useState<PlanFile[]>([]);
 	const [isSavingFileOrder, setIsSavingFileOrder] = useState(false);
 	const [fileOrderMessage, setFileOrderMessage] = useState<string | null>(null);
@@ -393,62 +374,14 @@ function PlanDetailPage() {
 	const [openingSessionId, setOpeningSessionId] = useState<string | null>(null);
 	const [notice, setNotice] = useState<PlanNotice | null>(null);
 
-	// Selection & chat reference states
-	const [selectedText, setSelectedText] = useState<string | null>(null);
-	const [selectionCoords, setSelectionCoords] = useState<{
-		x: number;
-		y: number;
-		text: string;
-	} | null>(null);
-
-	// Chat layout & sizing states
-	const [chatDock, setChatDock] = useState<ChatDock>("floating");
-	const [chatOpen, setChatOpen] = useState(true);
-	const [chatWidth, setChatWidth] = useState(360);
-	const [chatHeight, setChatHeight] = useState(360);
-
-	const isMobile = useIsMobile();
-	const effectiveChatDock: ChatDock =
-		isMobile && chatOpen ? "bottom" : chatDock;
 	const isFileTreeExpandedAll = fileTreeMode === "expanded";
 	const planFileOrderSensors = useSensors(
 		useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
 	);
 
 	useEffect(() => {
-		const preferences = readPlanChatLayoutPreferences(getBrowserStorage());
-		setChatDock(preferences.chatDock);
-		setChatOpen(preferences.chatOpen);
-		setChatWidth(preferences.chatWidth);
-		setChatHeight(preferences.chatHeight);
-		setPlanSidebarWidth(preferences.planSidebarWidth);
+		setPlanSidebarWidth(readPlanSidebarWidth(getBrowserStorage()));
 	}, []);
-
-	const handleSetChatDock = (dock: ChatDock) => {
-		setChatDock(dock);
-		setChatOpen(true);
-		persistPlanChatLayoutPreferences(getBrowserStorage(), {
-			chatDock: dock,
-			chatOpen: true,
-		});
-	};
-
-	const handleSetChatWidth = (width: number) => {
-		const w = clampChatWidth(width);
-		setChatWidth(w);
-		persistPlanChatLayoutPreferences(getBrowserStorage(), { chatWidth: w });
-	};
-
-	const handleSetChatHeight = (height: number) => {
-		const h = clampChatHeight(height);
-		setChatHeight(h);
-		persistPlanChatLayoutPreferences(getBrowserStorage(), { chatHeight: h });
-	};
-
-	const handleSetChatOpen = (open: boolean) => {
-		setChatOpen(open);
-		persistPlanChatLayoutPreferences(getBrowserStorage(), { chatOpen: open });
-	};
 
 	const handlePlanSidebarResizeStart = (
 		event: ReactMouseEvent<HTMLButtonElement>,
@@ -463,9 +396,7 @@ function PlanDetailPage() {
 				startWidth + moveEvent.clientX - startX,
 			);
 			setPlanSidebarWidth(nextWidth);
-			persistPlanChatLayoutPreferences(getBrowserStorage(), {
-				planSidebarWidth: nextWidth,
-			});
+			persistPlanSidebarWidth(getBrowserStorage(), nextWidth);
 		};
 
 		const handleMouseUp = () => {
@@ -483,7 +414,6 @@ function PlanDetailPage() {
 
 	const savePlanFile = useServerFn(savePlanFileFn);
 	const savePlanFileOrder = useServerFn(savePlanFileOrderFn);
-	const sendChatMessage = useServerFn(sendChatMessageFn);
 	const openAgent = useServerFn(openAgentSession);
 	const currentFiles = plan
 		? orderedFiles.length > 0
@@ -498,26 +428,11 @@ function PlanDetailPage() {
 		setFileOrderMessage(null);
 	}, [plan]);
 
-	// Load and listen to settings updates
-	useEffect(() => {
-		const updateAgent = () => {
-			const preferences = readAgentPreferences(getBrowserStorage());
-			setAiAgentType(preferences.agentType);
-		};
-		updateAgent();
-		window.addEventListener("my-workbench-settings-updated", updateAgent);
-		return () =>
-			window.removeEventListener("my-workbench-settings-updated", updateAgent);
-	}, []);
-
 	// Exit edit mode if document changes
-	// biome-ignore lint/correctness/useExhaustiveDependencies: file selection changes should reset local editing/AI state.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: file selection changes should reset local editing state.
 	useEffect(() => {
 		setIsEditing(false);
-		setAiMessage(null);
 		setError(null);
-		setSelectionCoords(null);
-		setSelectedText(null);
 	}, [cleanFilename]);
 
 	const handleOpenTool = async (
@@ -591,7 +506,6 @@ function PlanDetailPage() {
 
 		setIsSaving(true);
 		setError(null);
-		setAiMessage(null);
 
 		try {
 			await savePlanFile({
@@ -609,49 +523,6 @@ function PlanDetailPage() {
 			setError(getErrorMessage(err, "파일 저장에 실패했습니다."));
 		} finally {
 			setIsSaving(false);
-		}
-	};
-
-	const handleSelection = useCallback((selectedText: string, rect: DOMRect) => {
-		const x = rect.left + rect.width / 2 + window.scrollX;
-		const y = rect.top + window.scrollY;
-		setSelectionCoords({ x, y, text: selectedText });
-		setSelectedText(selectedText);
-	}, []);
-
-	const handleAddComment = async (selText: string, commentText: string) => {
-		if (!plan || !commentText.trim()) return;
-		const activeFileIndex = currentFiles.findIndex(
-			(f) => f.filename === cleanFilename,
-		);
-		const safeIndex = activeFileIndex !== -1 ? activeFileIndex : 0;
-		const activeFile = currentFiles[safeIndex];
-
-		setSelectionCoords(null);
-		setError(null);
-
-		try {
-			const cliPath = getAgentCliPath({
-				...readAgentPreferences(getBrowserStorage()),
-				agentType: aiAgentType,
-			});
-			await sendChatMessage({
-				data: {
-					taskId: plan.taskId,
-					message: commentText,
-					selectedText: selText,
-					filename: activeFile.filename,
-					agentType: aiAgentType,
-					cliPath,
-				},
-			});
-		} catch (err) {
-			console.error(err);
-			setNotice({
-				tone: "error",
-				title: "에이전트 메시지 전송 오류",
-				message: getErrorMessage(err, "알 수 없는 오류"),
-			});
 		}
 	};
 
@@ -744,14 +615,7 @@ function PlanDetailPage() {
 
 	return (
 		<AppShell variant="board">
-			<div
-				className="w-full mx-auto max-w-7xl px-6 py-10"
-				style={
-					chatOpen && effectiveChatDock === "bottom"
-						? { paddingBottom: `${chatHeight + 48}px` }
-						: undefined
-				}
-			>
+			<div className="w-full mx-auto max-w-7xl px-6 py-10">
 				<Link
 					to="/plans"
 					className="text-sm font-medium dark:text-zinc-200 text-zinc-600 dark:hover:text-white hover:text-zinc-900 hover:underline"
@@ -798,7 +662,6 @@ function PlanDetailPage() {
 								onClick={() => {
 									setEditContent(activeFile.content);
 									setIsEditing(true);
-									setAiMessage(null);
 									setError(null);
 								}}
 								className="flex items-center gap-1.5 rounded-md border border-[#d0d7de] bg-white px-3 py-1.5 text-xs font-bold text-[#57606a] transition hover:border-[#54aeff]/45 hover:bg-[#ddf4ff]/45 hover:text-[#0969da] cursor-pointer select-none dark:border-[#30363d] dark:bg-[#161b22] dark:text-[#c9d1d9] dark:hover:border-[#58a6ff]/45 dark:hover:bg-[#102a43]/55 dark:hover:text-[#79c0ff]"
@@ -1049,12 +912,6 @@ function PlanDetailPage() {
 										disabled={isSaving}
 									/>
 
-									{aiMessage && (
-										<div className="p-3 rounded-lg border border-indigo-150 dark:border-indigo-900/40 bg-indigo-50/20 dark:bg-indigo-950/10 text-xs font-semibold text-indigo-750 dark:text-indigo-300 leading-relaxed animate-fadeIn">
-											ℹ️ {aiMessage}
-										</div>
-									)}
-
 									{/* Actions */}
 									<div className="flex items-center justify-between pt-2 border-t border-zinc-200 dark:border-zinc-800">
 										<div>
@@ -1091,73 +948,16 @@ function PlanDetailPage() {
 							) : (
 								/* 뷰 모드 */
 								<div>
-									{aiMessage && (
-										<div className="mb-4 p-3 rounded-lg border border-indigo-150 dark:border-indigo-900/40 bg-indigo-50/20 dark:bg-indigo-950/10 text-xs font-semibold text-indigo-750 dark:text-indigo-300 leading-relaxed animate-fadeIn">
-											ℹ️ {aiMessage}
-										</div>
-									)}
 									<PlanMarkdown
 										html={activeFile.html}
 										raw={activeFile.content}
 										currentFile={activeFile.filename}
-										onSelection={handleSelection}
 									/>
 								</div>
 							)}
 						</article>
 					</div>
 				</div>
-
-				{selectionCoords && (
-					<SelectionPopover
-						x={selectionCoords.x}
-						y={selectionCoords.y}
-						selectedText={selectionCoords.text}
-						onAddComment={handleAddComment}
-						onClose={() => setSelectionCoords(null)}
-					/>
-				)}
-
-				<PlanChatDock
-					open={chatOpen}
-					dock={effectiveChatDock}
-					rawDock={chatDock}
-					width={chatWidth}
-					height={chatHeight}
-					onOpenChange={handleSetChatOpen}
-					chatPanel={
-						<ChatPanel
-							taskId={plan.taskId}
-							currentFile={activeFile.filename}
-							agentType={aiAgentType}
-							onAgentTypeChange={(type) => {
-								if (!isAgentType(type)) return;
-								const preferences = {
-									...readAgentPreferences(getBrowserStorage()),
-									agentType: type,
-								};
-								setAiAgentType(preferences.agentType);
-								persistAgentPreferences(getBrowserStorage(), {
-									agentType: preferences.agentType,
-								});
-							}}
-							cliPath={getAgentCliPath({
-								...readAgentPreferences(getBrowserStorage()),
-								agentType: aiAgentType,
-							})}
-							selectedText={selectedText}
-							clearSelection={() => setSelectedText(null)}
-							chatPosition={effectiveChatDock === "bottom" ? "bottom" : "side"}
-							chatDock={chatDock}
-							chatWidth={chatWidth}
-							chatHeight={chatHeight}
-							onDockChange={handleSetChatDock}
-							onOpenChange={handleSetChatOpen}
-							onWidthChange={handleSetChatWidth}
-							onHeightChange={handleSetChatHeight}
-						/>
-					}
-				/>
 			</div>
 		</AppShell>
 	);
@@ -1330,83 +1130,10 @@ function formatAgentType(value: string): string {
 	if (value === "cursor") return "Cursor";
 	if (value === "codex") return "Codex";
 	if (value === "claude") return "Claude";
-	if (value === "my-workbench") return "My Workbench";
 	return value;
 }
 
 function shortSessionId(value: string): string {
 	if (value.length <= 13) return value;
 	return `${value.slice(0, 8)}...${value.slice(-4)}`;
-}
-
-function PlanChatDock({
-	open,
-	dock,
-	rawDock,
-	width,
-	height,
-	chatPanel,
-	onOpenChange,
-}: {
-	open: boolean;
-	dock: ChatDock;
-	rawDock: ChatDock;
-	width: number;
-	height: number;
-	chatPanel: ReactNode;
-	onOpenChange: (open: boolean) => void;
-}) {
-	if (!open) {
-		return (
-			<button
-				type="button"
-				onClick={() => onOpenChange(true)}
-				className="fixed bottom-5 right-5 z-50 inline-flex items-center gap-2 rounded-full px-4 py-3 text-sm font-bold text-white shadow-2xl transition hover:brightness-110"
-				style={{
-					background: "var(--workbench-btn-primary)",
-					color: "var(--workbench-btn-primary-text)",
-				}}
-				aria-label={`AI 채팅 열기 (${rawDock})`}
-			>
-				<MessageSquare className="h-4 w-4" />
-				AI Chat
-			</button>
-		);
-	}
-
-	const shellStyle = getChatDockStyle(dock, width, height);
-	const shellClass = [
-		"fixed z-50 bg-zinc-100/60 dark:bg-zinc-950/55 backdrop-blur-xs shadow-2xl animate-in fade-in duration-150",
-		dock === "bottom"
-			? "left-0 right-0 bottom-0 border-t dark:border-zinc-800 border-zinc-200"
-			: dock === "left"
-				? "left-0 top-12 bottom-0 border-r dark:border-zinc-800 border-zinc-200"
-				: dock === "right"
-					? "right-0 top-12 bottom-0 border-l dark:border-zinc-800 border-zinc-200"
-					: "right-5 bottom-5 rounded-lg",
-	].join(" ");
-
-	return (
-		<div style={shellStyle} className={shellClass}>
-			{chatPanel}
-		</div>
-	);
-}
-
-function getChatDockStyle(
-	dock: ChatDock,
-	width: number,
-	height: number,
-): CSSProperties {
-	const maxFloatingHeight = "min(620px, calc(100vh - 6rem))";
-	if (dock === "bottom") {
-		return { height: `${height}px` };
-	}
-	if (dock === "left" || dock === "right") {
-		return { width: `${width}px` };
-	}
-	return {
-		width: `min(${width}px, calc(100vw - 2.5rem))`,
-		height: maxFloatingHeight,
-	};
 }

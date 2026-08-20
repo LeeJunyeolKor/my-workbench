@@ -47,7 +47,6 @@ const agentSessionTypes = new Set<AgentSessionType>([
 	"cursor",
 	"codex",
 	"claude",
-	"my-workbench",
 ]);
 const shellUnsafePattern = /["'`$\\\r\n]/;
 const branchUnsafePattern = /["'`$\\\s;&|<>\r\n]/;

@@ -1,3 +1,6 @@
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+
 /**
  * High-level Tauri IPC API client for the My Workbench agent workspace.
  *
@@ -270,57 +273,21 @@ export function projectTaskState(
 	}
 }
 
-// Dynamic module paths prevent Vite from requiring Tauri in browser builds.
-const TAURI_CORE_PKG = "@tauri-apps/api/core";
-const TAURI_EVENT_PKG = "@tauri-apps/api/event";
+export const DESKTOP_RUNTIME_REQUIRED_MESSAGE =
+	"이 기능은 My Workbench 데스크톱 앱에서만 사용할 수 있습니다.";
 
-type TauriInvoke = <T>(
-	command: string,
-	args?: Record<string, unknown>,
-) => Promise<T>;
-type TauriListen = <T>(
-	event: string,
-	callback: (event: { payload: T }) => void,
-) => Promise<() => void>;
-
-async function getTauriInvoke(): Promise<TauriInvoke | null> {
-	try {
-		if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
-			const core = (await import(/* @vite-ignore */ TAURI_CORE_PKG)) as {
-				invoke: TauriInvoke;
-			};
-			return core.invoke;
-		}
-	} catch {
-		return null;
-	}
-	return null;
+export function hasTauriRuntime(): boolean {
+	return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
-
-async function getTauriListen(): Promise<TauriListen | null> {
-	try {
-		if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
-			const event = (await import(/* @vite-ignore */ TAURI_EVENT_PKG)) as {
-				listen: TauriListen;
-			};
-			return event.listen;
-		}
-	} catch {
-		return null;
+function requireTauriRuntime(): void {
+	if (!hasTauriRuntime()) {
+		throw new Error(DESKTOP_RUNTIME_REQUIRED_MESSAGE);
 	}
-	return null;
 }
 
 export async function selectWorkspace(path: string): Promise<Workspace> {
-	const invoke = await getTauriInvoke();
-	if (invoke) {
-		return invoke<Workspace>("select_workspace", { path });
-	}
-	return {
-		id: `ws-${Date.now()}`,
-		path,
-		name: path.split("/").pop() || "workspace",
-	};
+	requireTauriRuntime();
+	return invoke<Workspace>("select_workspace", { path });
 }
 
 export type TaskExecutionMode = "new-worktree" | "existing-worktree";
@@ -331,88 +298,43 @@ export async function startAgentTask(
 	agentType = "mock",
 	executionMode: TaskExecutionMode = "new-worktree",
 ): Promise<Task> {
-	const invoke = await getTauriInvoke();
-	if (invoke) {
-		const args: Record<string, unknown> = {
-			workspacePath,
-			prompt,
-			agentType,
-		};
-		if (executionMode !== "new-worktree") {
-			args.executionMode = executionMode;
-		}
-		return invoke<Task>("start_agent_task", args);
-	}
-
-	const taskId = `task-${Math.random().toString(36).substring(2, 9)}`;
-	return {
-		id: taskId,
-		workspace_path: workspacePath,
-		worktree_path:
-			executionMode === "existing-worktree"
-				? workspacePath
-				: `${workspacePath}/.my-workbench-worktrees/wt-${taskId}`,
-		branch_name:
-			executionMode === "existing-worktree"
-				? null
-				: `my-workbench/wt-${taskId}`,
-		status: { state: "Running" },
+	requireTauriRuntime();
+	const args: Record<string, unknown> = {
+		workspacePath,
 		prompt,
-		agent_type: agentType,
-		created_at: new Date().toISOString(),
+		agentType,
 	};
+	if (executionMode !== "new-worktree") {
+		args.executionMode = executionMode;
+	}
+	return invoke<Task>("start_agent_task", args);
 }
 
 export async function cancelAgentTask(taskId: string): Promise<void> {
-	const invoke = await getTauriInvoke();
-	if (invoke) {
-		return invoke<void>("cancel_agent_task", { taskId });
-	}
+	requireTauriRuntime();
+	return invoke<void>("cancel_agent_task", { taskId });
 }
 
 export async function getChangedFiles(
 	worktreePath: string,
 ): Promise<ChangedFile[]> {
-	const invoke = await getTauriInvoke();
-	if (invoke) {
-		return invoke<ChangedFile[]>("get_changed_files", { worktreePath });
-	}
-	return [
-		{ path: "src/lib/tauri-ipc.ts", status: "modified" },
-		{ path: "src/routes/agent-slice.tsx", status: "added" },
-		{ path: "task_output.txt", status: "untracked" },
-	];
+	requireTauriRuntime();
+	return invoke<ChangedFile[]>("get_changed_files", { worktreePath });
 }
 
 export async function getDiff(
 	worktreePath: string,
 	filePath: string,
 ): Promise<string> {
-	const invoke = await getTauriInvoke();
-	if (invoke) {
-		return invoke<string>("get_diff", { worktreePath, filePath });
-	}
-	return `--- a/${filePath}\n+++ b/${filePath}\n@@ -1,3 +1,5 @@\n+// Added via Agent Execution\n+console.log("Agent finished slice verification");\n`;
+	requireTauriRuntime();
+	return invoke<string>("get_diff", { worktreePath, filePath });
 }
 
 export async function listenAgentEvents(
 	callback: (event: AgentEvent) => void,
 ): Promise<() => void> {
-	const tauriRuntime =
-		typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-	if (tauriRuntime) {
-		const listen = await getTauriListen();
-		if (!listen) {
-			throw new Error("Tauri event listener is unavailable");
-		}
-		const unlisten = await listen<AgentEvent>(
-			"my-workbench:agent-event",
-			(event) => {
-				callback(event.payload);
-			},
-		);
-		return unlisten;
-	}
-
-	return () => {};
+	requireTauriRuntime();
+	return listen<AgentEvent>("my-workbench:agent-event", (event) => {
+		callback(event.payload);
+	});
 }

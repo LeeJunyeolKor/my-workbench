@@ -1,4 +1,4 @@
-export type AgentSessionType = "cursor" | "codex" | "claude" | "my-workbench";
+export type AgentSessionType = "cursor" | "codex" | "claude";
 
 export type AgentSessionInfo = {
 	agentType: AgentSessionType;
@@ -414,7 +414,7 @@ export function parseAgentSessionContent(input: {
 			extractLastActiveAt(input.content) ?? input.transcriptMtime ?? null,
 		score,
 		matchReasons: reasons,
-		canResume: input.agentType !== "my-workbench" && Boolean(sessionId),
+		canResume: Boolean(sessionId),
 	};
 }
 
