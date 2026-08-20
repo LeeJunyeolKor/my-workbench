@@ -222,31 +222,35 @@ impl LocalDataService {
         Ok(PlanList { plans_dir, plans })
     }
 
-    pub fn load_plan(&self, task_id: &str) -> Result<Option<PlanContent>, String> {
+    pub fn load_plan(&self, task_id: &str) -> Result<PlanContent, String> {
         validate_task_id(task_id)?;
         let plans_dir = self.plans_dir_string();
         let Some(plans_root) = existing_regular_directory(&self.plans_dir, false)? else {
-            return Ok(None);
+            return Ok(PlanContent {
+                plans_dir,
+                task_id: task_id.to_string(),
+                files: Vec::new(),
+            });
         };
 
         let task_dir = self.plans_dir.join(task_id);
         let Some(task_root) = existing_regular_directory(&task_dir, false)? else {
-            return Ok(None);
+            return Ok(PlanContent {
+                plans_dir,
+                task_id: task_id.to_string(),
+                files: Vec::new(),
+            });
         };
         if !task_root.starts_with(&plans_root) {
             return Err("구현 계획 디렉터리가 계획 루트 밖을 가리킵니다.".to_string());
         }
 
         let files = read_plan_files(&task_dir, &task_root)?;
-        if files.is_empty() {
-            return Ok(None);
-        }
-
-        Ok(Some(PlanContent {
+        Ok(PlanContent {
             plans_dir,
             task_id: task_id.to_string(),
             files,
-        }))
+        })
     }
 
     pub fn save_plan_file(
@@ -786,7 +790,10 @@ mod tests {
             TasksContent { content: None }
         );
         assert!(service.list_plans().unwrap().plans.is_empty());
-        assert!(service.load_plan("TASK-1").unwrap().is_none());
+        let missing_plan = service.load_plan("TASK-1").unwrap();
+        assert_eq!(missing_plan.plans_dir, service.plans_dir_string());
+        assert_eq!(missing_plan.task_id, "TASK-1");
+        assert!(missing_plan.files.is_empty());
 
         remove_test_root(root);
     }
@@ -864,7 +871,7 @@ mod tests {
         assert_eq!(list.plans[0].task_id, "TASK-123");
         assert_eq!(list.plans[0].content, "# Plan\n");
 
-        let plan = service.load_plan("TASK-123").unwrap().unwrap();
+        let plan = service.load_plan("TASK-123").unwrap();
         assert_eq!(plan.task_id, "TASK-123");
         assert_eq!(plan.files.len(), 2);
         assert_eq!(plan.files[0].filename, "notes/detail.md");
@@ -1008,7 +1015,7 @@ mod tests {
         symlink(task_dir.join("real"), task_dir.join("alias")).unwrap();
 
         assert!(service.list_plans().unwrap().plans.is_empty());
-        let plan = service.load_plan("TASK-1").unwrap().unwrap();
+        let plan = service.load_plan("TASK-1").unwrap();
         assert_eq!(plan.files.len(), 1);
         assert_eq!(plan.files[0].filename, "real/detail.md");
         assert!(service

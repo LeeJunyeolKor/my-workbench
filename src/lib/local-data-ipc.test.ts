@@ -159,6 +159,23 @@ describe("로컬 데이터 IPC", () => {
 		});
 	});
 
+	it("없는 계획도 설정된 계획 디렉터리를 유지한다", async () => {
+		Object.defineProperty(window, "__TAURI_INTERNALS__", {
+			configurable: true,
+			value: {},
+		});
+		invokeMock.mockResolvedValueOnce({
+			plansDir: "/tmp/plans",
+			taskId: "DEMO-1",
+			files: [],
+		});
+
+		await expect(loadPlan("DEMO-1")).resolves.toEqual({
+			plansDir: "/tmp/plans",
+			plan: null,
+		});
+	});
+
 	it("계획 저장 명령과 인자를 그대로 전달한다", async () => {
 		Object.defineProperty(window, "__TAURI_INTERNALS__", {
 			configurable: true,

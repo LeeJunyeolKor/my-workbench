@@ -30,7 +30,7 @@ pub async fn list_plans(
 pub async fn load_plan(
     state: tauri::State<'_, Result<LocalDataService, String>>,
     task_id: String,
-) -> Result<Option<PlanContent>, String> {
+) -> Result<PlanContent, String> {
     let service = configured_service(&state)?;
     run_io(move || service.load_plan(&task_id)).await
 }

@@ -136,9 +136,9 @@ export async function listPlans(): Promise<PlanListResult> {
 
 export async function loadPlan(taskId: string): Promise<PlanDetailResult> {
 	requireDesktopRuntime();
-	const result = await invoke<RawPlanDetail | null>("load_plan", { taskId });
-	if (!result || result.files.length === 0) {
-		return { plansDir: result?.plansDir ?? "", plan: null };
+	const result = await invoke<RawPlanDetail>("load_plan", { taskId });
+	if (result.files.length === 0) {
+		return { plansDir: result.plansDir, plan: null };
 	}
 
 	const orderedRawFiles = orderPlanFiles(result.files);
